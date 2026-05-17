@@ -1,0 +1,38 @@
+version: "1.0"
+
+project:
+  name: shapes_existing
+  description: >
+    Improve an existing shapes classification CNN. Existing code provides
+    a baseline CNN model, training, evaluation, and tests.
+
+goals:
+  task_type: improve_existing
+  task_description: >
+    Improve the existing shapes classifier to achieve at least 85%
+    accuracy on the test set. The existing code has a simple CNN model.
+    The dataset contains 64x64 RGB PNG images organized in directories:
+    data/train/{circle,square,triangle}/ and data/test/{circle,square,triangle}/.
+    90 training images (30 per class) and 30 test images (10 per class).
+    Review the code, identify improvements (e.g. data augmentation,
+    better architecture, learning rate tuning), and modify existing
+    files using edit_file.
+    Do NOT create versioned files — edit existing files directly.
+    Note: a tiny CNN with rotation/flip data augmentation reaches ~0.93
+    on this fixture, so the 0.85 target is achievable but requires
+    something better than naive pixel classification (~0.73).
+  target_metric:
+    name: accuracy
+    target_value: 0.85
+    comparison: ">="
+
+dataset:
+  type: image_classification
+  train_path: train
+  test_path: test
+
+workspace:
+  existing_code: true
+  environment:
+    type: venv
+    path: venv

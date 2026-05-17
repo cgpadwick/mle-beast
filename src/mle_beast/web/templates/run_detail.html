@@ -1,0 +1,354 @@
+{% extends "base.html" %}
+
+{% block title %}Run {{ run.id[:8] }} — MLE-Beast{% endblock %}
+
+{% block content %}
+<div class="run-info-card card" onclick="this.classList.toggle('expanded')" style="cursor: pointer;">
+    <div class="run-info-header">
+        <h1>Run {{ run.id[:8] }}...
+            <span class="badge {{ status_badge_class(run.status) }}" id="run-status-badge">{{ run.status }}</span>
+        </h1>
+        <div style="display: flex; gap: 8px; align-items: center;">
+            <span class="expand-hint">click to expand</span>
+            {% if run.status == 'running' %}
+            <button class="btn btn-danger btn-sm"
+                    hx-post="/api/runs/{{ run.id }}/cancel"
+                    hx-confirm="Cancel this run?"
+                    onclick="event.stopPropagation()">Cancel</button>
+            {% elif run.status in ('completed', 'failed') %}
+            <a href="/runs/new" class="btn btn-sm" onclick="event.stopPropagation()">New Run</a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="run-info-summary">
+        <span class="meta-item"><span class="meta-label">Task:</span> {{ run.task[:100] }}{% if run.task|length > 100 %}...{% endif %}</span>
+        <span class="meta-item"><span class="meta-label">Workspace:</span> {{ run.workspace }}</span>
+    </div>
+    <div class="run-info-detail">
+        <div class="detail-row"><span class="meta-label">Task:</span><span class="detail-value">{{ run.task }}</span></div>
+        <div class="detail-row"><span class="meta-label">Workspace:</span><span class="detail-value" style="font-family: var(--font-mono); font-size: 0.85rem;">{{ run.workspace }}</span></div>
+        {% if run.target_accuracy %}
+        <div class="detail-row"><span class="meta-label">Target Accuracy:</span><span class="detail-value">{{ run.target_accuracy }}</span></div>
+        {% endif %}
+        {% if run.dataset_path %}
+        <div class="detail-row"><span class="meta-label">Dataset:</span><span class="detail-value" style="font-family: var(--font-mono); font-size: 0.85rem;">{{ run.dataset_path }}</span></div>
+        {% endif %}
+        <div class="detail-row"><span class="meta-label">Mode:</span><span class="detail-value">{{ run.mode }}</span></div>
+        <div class="detail-row"><span class="meta-label">Force CPU:</span><span class="detail-value">{{ "yes" if run.force_cpu else "no" }}</span></div>
+        <div class="detail-row"><span class="meta-label">Created:</span><span class="detail-value">{{ ts_to_str(run.created_at) }}</span></div>
+        {% if run.started_at %}
+        <div class="detail-row"><span class="meta-label">Started:</span><span class="detail-value">{{ ts_to_str(run.started_at) }}</span></div>
+        {% endif %}
+        {% if run.completed_at %}
+        <div class="detail-row"><span class="meta-label">Completed:</span><span class="detail-value">{{ ts_to_str(run.completed_at) }}</span></div>
+        {% endif %}
+        <div class="detail-row"><span class="meta-label">Run ID:</span><span class="detail-value" style="font-family: var(--font-mono); font-size: 0.85rem;">{{ run.id }}</span></div>
+    </div>
+</div>
+
+<!-- Stage dashboard -->
+<h2 class="section-heading">Stages</h2>
+<div id="stage-dashboard"
+     hx-get="/partials/runs/{{ run.id }}/stages"
+     hx-trigger="every 3s [document.getElementById('run-status-badge')?.textContent.trim() === 'running']"
+     hx-swap="innerHTML">
+    {% include "partials/stage_dashboard.html" %}
+</div>
+
+{% if run.verdict_json and run.status in ('completed', 'failed') %}
+<div class="verdict-box">
+    <h3>Verdict</h3>
+    <pre>{{ run.verdict_json }}</pre>
+</div>
+{% endif %}
+
+{% if run.error_message and run.status == 'failed' %}
+<div class="verdict-box" style="border-color: var(--red);">
+    <h3 style="color: var(--red);">Error</h3>
+    <pre>{{ run.error_message }}</pre>
+</div>
+{% endif %}
+
+<!-- Tab bar: Console (raw stdout) vs Events (structured) -->
+<div class="log-filters" style="margin-top: 24px;">
+    <button class="filter-btn active" id="tab-console" onclick="showTab('console')">Console</button>
+    <button class="filter-btn" id="tab-events" onclick="showTab('events')">Events</button>
+    <span style="margin-left: auto;">
+        <label style="font-size: 0.85rem;">
+            <input type="checkbox" id="autoscroll" checked> auto-scroll
+        </label>
+    </span>
+</div>
+
+<!-- Console (raw stdout/stderr from the pipeline thread) -->
+<div id="console-pane">
+    <pre id="console-text"
+         style="background:#0a0a0a;color:#e0e0e0;padding:12px;border-radius:6px;
+                font-family:var(--font-mono);font-size:0.85rem;line-height:1.4;
+                max-height:600px;overflow:auto;white-space:pre-wrap;
+                word-break:break-word;margin:0;">(no console output yet)</pre>
+</div>
+
+<!-- Event log (structured, filterable) -->
+<div id="events-pane" style="display: none;">
+    <div class="log-filters" id="log-filters">
+        <span class="filter-label">Filter:</span>
+        <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">All</button>
+        <button class="filter-btn" data-filter="stage" onclick="setFilter('stage')">Stages</button>
+        <button class="filter-btn" data-filter="tool" onclick="setFilter('tool')">Tools</button>
+        <button class="filter-btn" data-filter="retry" onclick="setFilter('retry')">Retries</button>
+        <button class="filter-btn" data-filter="error" onclick="setFilter('error')">Errors</button>
+        <button class="filter-btn" data-filter="debug" onclick="setFilter('debug')">Debug</button>
+        <span style="margin-left: auto;"><button class="btn btn-sm" onclick="refreshLog()">Refresh</button></span>
+    </div>
+    <div class="log-viewer" id="log-viewer"></div>
+</div>
+
+<script>
+(function() {
+    var logViewer = document.getElementById('log-viewer');
+    var currentFilter = 'all';
+    var runStatus = '{{ run.status }}';
+    var runId = '{{ run.id }}';
+
+    // Classify event into a filter category
+    function classifyEvent(etype, data) {
+        if (etype === 'tool_executed') return 'tool';
+        if (etype === 'stage_started' || etype === 'stage_completed') return 'stage';
+        if (etype === 'retry_occurred') return 'retry';
+        if (etype === 'run_state_changed') return 'state';
+        if (etype === 'log_message') {
+            if (data && data.level === 'error') return 'error';
+            if (data && data.level === 'warning') return 'error';
+            if (data && data.level === 'debug') return 'debug';
+            return 'info';
+        }
+        return 'info';
+    }
+
+    // Human-readable summary for an event
+    function summarize(etype, data) {
+        if (etype === 'stage_started') return 'Stage started: ' + (data.stage || '');
+        if (etype === 'stage_completed') return 'Stage ' + (data.outcome || '') + ': ' + (data.stage || '');
+        if (etype === 'tool_executed') return '[' + (data.iteration || '') + '] ' + (data.tool_name || '') + ': ' + (data.result_preview || '').substring(0, 120);
+        if (etype === 'retry_occurred') return 'Retry ' + (data.attempt || '') + '/' + (data.max_attempts || '') + ': ' + (data.feedback || '').substring(0, 120);
+        if (etype === 'run_state_changed') return 'Run: ' + (data.old_state || '') + ' → ' + (data.new_state || '');
+        if (etype === 'log_message') return (data.message || '').substring(0, 200);
+        return etype;
+    }
+
+    // Format timestamp
+    function fmtTime(ts) {
+        if (!ts) return '';
+        var d = new Date(ts * 1000);
+        return d.toISOString().substring(11, 19) + ' UTC';
+    }
+
+    // Badge class for event category
+    function typeBadgeClass(cat) {
+        return 'type-' + cat;
+    }
+
+    // Create a log entry DOM element
+    function createLogEntry(etype, stage, ts, data, rawJson) {
+        var cat = classifyEvent(etype, data);
+        var div = document.createElement('div');
+        div.className = 'log-entry';
+        div.setAttribute('data-category', cat);
+
+        // Check current filter
+        if (currentFilter !== 'all' && cat !== currentFilter) {
+            div.classList.add('filtered-out');
+        }
+
+        var summary = document.createElement('div');
+        summary.className = 'log-summary';
+
+        summary.innerHTML =
+            '<span class="log-time">' + fmtTime(ts) + '</span>' +
+            (stage ? '<span class="log-stage">' + stage + '</span>' : '') +
+            '<span class="log-type-badge ' + typeBadgeClass(cat) + '">' + cat + '</span>' +
+            '<span class="log-msg">' + escapeHtml(summarize(etype, data)) + '</span>';
+
+        div.appendChild(summary);
+
+        // Expandable detail (pretty-printed JSON)
+        var detail = document.createElement('div');
+        detail.className = 'log-detail';
+        try {
+            var parsed = typeof rawJson === 'string' ? JSON.parse(rawJson) : data;
+            detail.textContent = JSON.stringify(parsed, null, 2);
+        } catch(e) {
+            detail.textContent = rawJson || JSON.stringify(data, null, 2);
+        }
+        div.appendChild(detail);
+
+        // Click to expand
+        div.addEventListener('click', function() {
+            div.classList.toggle('expanded');
+        });
+
+        return div;
+    }
+
+    function escapeHtml(s) {
+        var d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+
+    // Render initial events from DB (already ordered by timestamp ASC, we reverse for newest-first)
+    var initialEvents = {{ events | tojson }};
+    initialEvents.reverse();
+    initialEvents.forEach(function(evt) {
+        var data = {};
+        try { data = JSON.parse(evt.data_json || '{}'); } catch(e) {}
+        var el = createLogEntry(evt.event_type, evt.stage, evt.timestamp, data, evt.data_json);
+        logViewer.appendChild(el);
+    });
+
+    if (initialEvents.length === 0 && runStatus !== 'running') {
+        logViewer.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 20px;">No events recorded.</div>';
+    }
+
+    // SSE for live updates
+    if (runStatus === 'running') {
+        var evtSource = new EventSource('/api/runs/' + runId + '/events');
+
+        function handleSSE(e) {
+            var data = {};
+            try { data = JSON.parse(e.data); } catch(err) { return; }
+
+            // Remove "no events" placeholder
+            var placeholder = logViewer.querySelector('[style*="text-align: center"]');
+            if (placeholder) placeholder.remove();
+
+            var el = createLogEntry(
+                data.event_type, data.stage, data.timestamp, data, e.data
+            );
+            // Prepend (newest first)
+            logViewer.insertBefore(el, logViewer.firstChild);
+        }
+
+        evtSource.addEventListener('log_entry', handleSSE);
+        evtSource.addEventListener('stage_update', function(e) {
+            handleSSE(e);
+            // Also refresh stage dashboard
+            htmx.ajax('GET', '/partials/runs/' + runId + '/stages', '#stage-dashboard');
+        });
+        evtSource.addEventListener('run_complete', function(e) {
+            handleSSE(e);
+            evtSource.close();
+            // Reload page after a moment to show final state
+            setTimeout(function() { window.location.reload(); }, 1000);
+        });
+        evtSource.onerror = function() {
+            // Will auto-reconnect, but if run is done just close
+            if (runStatus !== 'running') evtSource.close();
+        };
+    }
+
+    // Poll run status to detect completion (covers cross-process runs where SSE may not fire)
+    if (runStatus === 'running') {
+        setInterval(function() {
+            fetch('/api/runs/' + runId)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.run && data.run.status !== 'running') {
+                        window.location.reload();
+                    }
+                })
+                .catch(function() {});
+        }, 5000);
+    }
+
+    // Refresh log from API
+    window.refreshLog = function() {
+        fetch('/api/runs/' + runId + '/logs')
+            .then(function(r) { return r.json(); })
+            .then(function(events) {
+                logViewer.innerHTML = '';
+                events.reverse();
+                events.forEach(function(evt) {
+                    var data = {};
+                    try { data = JSON.parse(evt.data_json || '{}'); } catch(e) {}
+                    var el = createLogEntry(evt.event_type, evt.stage, evt.timestamp, data, evt.data_json);
+                    logViewer.appendChild(el);
+                });
+                if (events.length === 0) {
+                    logViewer.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 20px;">No events recorded.</div>';
+                }
+            });
+    };
+
+    // Filter logic
+    window.setFilter = function(filter) {
+        currentFilter = filter;
+        // Update button states (only inside the events pane to avoid clobbering tab buttons)
+        document.querySelectorAll('#events-pane .filter-btn').forEach(function(btn) {
+            btn.classList.toggle('active', btn.getAttribute('data-filter') === filter);
+        });
+        // Show/hide entries
+        document.querySelectorAll('.log-entry').forEach(function(entry) {
+            var cat = entry.getAttribute('data-category');
+            if (filter === 'all' || cat === filter) {
+                entry.classList.remove('filtered-out');
+            } else {
+                entry.classList.add('filtered-out');
+            }
+        });
+    };
+
+    // ----- Tab switching -----
+    window.showTab = function(tab) {
+        document.getElementById('tab-console').classList.toggle('active', tab === 'console');
+        document.getElementById('tab-events').classList.toggle('active', tab === 'events');
+        document.getElementById('console-pane').style.display = tab === 'console' ? '' : 'none';
+        document.getElementById('events-pane').style.display = tab === 'events' ? '' : 'none';
+    };
+
+    // ----- Console live tail -----
+    var consoleText = document.getElementById('console-text');
+    var consoleOffset = 0;
+    var consoleInited = false;
+
+    function pollConsole() {
+        fetch('/api/runs/' + runId + '/console?offset=' + consoleOffset)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.exists) {
+                    if (!consoleInited) {
+                        consoleText.textContent = '(no console output yet)';
+                    }
+                    return;
+                }
+                if (!consoleInited) {
+                    consoleText.textContent = '';
+                    consoleInited = true;
+                }
+                if (data.text) {
+                    var autoscroll = document.getElementById('autoscroll').checked;
+                    consoleText.appendChild(document.createTextNode(data.text));
+                    consoleOffset = data.size;
+                    if (autoscroll) {
+                        consoleText.scrollTop = consoleText.scrollHeight;
+                    }
+                }
+            })
+            .catch(function() {});
+    }
+
+    // First poll immediately, then every 1.5s while running, every 5s after.
+    pollConsole();
+    var consolePoll = setInterval(function() {
+        pollConsole();
+    }, runStatus === 'running' ? 1500 : 5000);
+    // Don't leave the interval running forever if the page sits idle on a
+    // completed run — slow it down once we know the file is done growing.
+    if (runStatus !== 'running') {
+        // One more poll after 5s to catch any tail bytes, then stop.
+        setTimeout(function() { pollConsole(); clearInterval(consolePoll); }, 5000);
+    }
+})();
+</script>
+{% endblock %}

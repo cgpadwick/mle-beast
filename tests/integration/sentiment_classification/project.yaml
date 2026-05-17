@@ -1,0 +1,36 @@
+version: "1.0"
+
+project:
+  name: sentiment_classification
+  description: >
+    Binary sentiment classification on synthetic product reviews.
+    Greenfield project where model and training code are generated from scratch.
+
+goals:
+  task_type: new_architecture
+  task_description: >
+    Train a text classifier to predict sentiment (positive/negative) from
+    short product reviews. Use a simple architecture suitable for this small
+    dataset - either a bag-of-words with MLP, or a small LSTM/GRU.
+    The data is in JSONL format: the data/ directory has train/ and test/
+    subdirectories, each containing positive.jsonl and negative.jsonl files.
+    Each line is a JSON object with "text" and "label" fields.
+    300 training samples (150 per class) and 100 test samples (50 per class).
+    Target: accuracy >= 0.95 on the test set. A naive tfidf + logistic
+    regression already hits ~0.99 on this synthetic dataset, so 0.95
+    represents a "your code at least works end-to-end" bar rather than
+    a research challenge.
+  target_metric:
+    name: accuracy
+    target_value: 0.95
+    comparison: ">="
+
+dataset:
+  type: text_classification
+  train_path: train
+  test_path: test
+
+workspace:
+  environment:
+    type: venv
+    path: venv

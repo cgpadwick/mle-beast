@@ -1,0 +1,58 @@
+[project]
+name = "mle-beast"
+version = "0.1.0"
+description = "LLM-driven ML engineering agent — automatically generate, test, train, and improve ML models via actor/critic hill-climbing"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Chris Padwick", email = "cgpadwick@gmail.com" }]
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+]
+dependencies = [
+    "pocketflow",
+    "instructor",
+    "openai",
+    "litellm",
+    "pydantic>=2.5",
+    "pyyaml>=6.0",
+    "pytest>=8.0",
+]
+
+[project.optional-dependencies]
+web = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.28",
+    "jinja2>=3.1",
+    "python-multipart",
+]
+
+[project.urls]
+Homepage = "https://github.com/cgpadwick/mle-beast"
+Repository = "https://github.com/cgpadwick/mle-beast"
+Issues = "https://github.com/cgpadwick/mle-beast/issues"
+
+[project.scripts]
+mle-beast = "mle_beast.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: full end-to-end integration tests (require API key)",
+    "timeout: test timeout in seconds",
+]
+norecursedirs = ["templates"]

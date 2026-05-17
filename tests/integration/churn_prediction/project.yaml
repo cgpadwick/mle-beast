@@ -1,0 +1,35 @@
+version: "1.0"
+
+project:
+  name: churn_prediction
+  description: >
+    Predict customer churn using a tabular dataset with features like tenure,
+    monthly charges, contract type, and support status. Binary classification
+    task to predict whether a customer will leave (churn=1) or stay (churn=0).
+
+goals:
+  task_type: new_architecture
+  task_description: >
+    Build a machine learning model to predict customer churn with at
+    least 85% accuracy on the test set. Both train.csv and test.csv
+    share the schema (tenure, monthly_charges, total_charges,
+    contract_type, has_support, churned). `contract_type` is a
+    categorical integer (0=month-to-month, 1=one-year, 2=two-year);
+    `has_support` is binary 0/1; everything else is numeric. Consider
+    tree ensembles (XGBoost/LightGBM/RandomForest) which handle this
+    feature mix natively, or an MLP with proper standardization plus
+    embedding of the contract_type categorical.
+  target_metric:
+    name: accuracy
+    target_value: 0.85
+    comparison: ">="
+
+dataset:
+  type: tabular
+  train_path: train.csv
+  test_path: test.csv
+
+workspace:
+  environment:
+    type: venv
+    path: venv

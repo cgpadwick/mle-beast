@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+
+{% block title %}Settings — MLE-Beast{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Settings</h1>
+</div>
+
+<form id="settings-form">
+    <!-- Model Settings -->
+    <div class="card">
+        <h3 class="card-section-heading">Model Settings</h3>
+        <div class="form-group">
+            <label>Model Provider</label>
+            <div class="radio-group">
+                <label>
+                    <input type="radio" name="model_provider" value="openai"
+                           {% if settings.model_provider == "openai" %}checked{% endif %}>
+                    OpenAI
+                </label>
+                <label>
+                    <input type="radio" name="model_provider" value="openrouter"
+                           {% if settings.model_provider == "openrouter" %}checked{% endif %}>
+                    OpenRouter
+                </label>
+                <label>
+                    <input type="radio" name="model_provider" value="local"
+                           {% if settings.model_provider == "local" %}checked{% endif %}>
+                    Local Model
+                </label>
+                <label>
+                    <input type="radio" name="model_provider" value=""
+                           {% if not settings.model_provider %}checked{% endif %}>
+                    Auto-detect
+                </label>
+            </div>
+            <div class="help-text">
+                Auto-detect uses environment variables (LOCAL_LLM_BASE_URL, OPENROUTER_API_KEY, OPENAI_API_KEY).
+                Currently detected: <strong>{{ detected_provider }}</strong>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="model_name">Model Name</label>
+            <input type="text" id="model_name" name="model_name"
+                   value="{{ settings.model_name }}"
+                   placeholder="Leave empty for provider default">
+            <div class="help-text" id="model-name-help">Override the LLM model. Empty = use provider default.</div>
+        </div>
+        <div class="form-group">
+            <label for="max_tokens">Max Tokens</label>
+            <input type="number" id="max_tokens" name="max_tokens"
+                   value="{{ settings.max_tokens }}" min="1">
+            <div class="help-text">Maximum completion tokens per LLM call.</div>
+        </div>
+    </div>
+
+    <!-- Workflow Parameters -->
+    <div class="card">
+        <h3 class="card-section-heading">Workflow Parameters</h3>
+        <div class="form-group">
+            <label for="max_code_review_retries">Max Code/Review Retries</label>
+            <input type="number" id="max_code_review_retries" name="max_code_review_retries"
+                   value="{{ settings.max_code_review_retries }}" min="1">
+            <div class="help-text">Max retries for the coding → testing → review loop.</div>
+        </div>
+        <div class="form-group">
+            <label for="max_training_analysis_retries">Max Training/Analysis Retries</label>
+            <input type="number" id="max_training_analysis_retries" name="max_training_analysis_retries"
+                   value="{{ settings.max_training_analysis_retries }}" min="1">
+            <div class="help-text">Max retries for the training → analysis loop.</div>
+        </div>
+        <div class="form-group">
+            <label for="max_tool_iterations">Max Tool Iterations</label>
+            <input type="number" id="max_tool_iterations" name="max_tool_iterations"
+                   value="{{ settings.max_tool_iterations }}" min="1">
+            <div class="help-text">Maximum tool loop iterations for actor nodes.</div>
+        </div>
+        <div class="form-group">
+            <label for="max_tool_iterations_training">Max Tool Iterations (Training)</label>
+            <input type="number" id="max_tool_iterations_training" name="max_tool_iterations_training"
+                   value="{{ settings.max_tool_iterations_training }}" min="1">
+            <div class="help-text">Maximum tool loop iterations for the training stage.</div>
+        </div>
+        <div class="form-group">
+            <label for="llm_call_retries">LLM Call Retries</label>
+            <input type="number" id="llm_call_retries" name="llm_call_retries"
+                   value="{{ settings.llm_call_retries }}" min="1">
+            <div class="help-text">Retries on transient LLM failures.</div>
+        </div>
+    </div>
+
+    <!-- Timeouts -->
+    <div class="card">
+        <h3 class="card-section-heading">Timeouts</h3>
+        <div class="form-group">
+            <label for="training_timeout">Training Timeout (seconds)</label>
+            <input type="number" id="training_timeout" name="training_timeout"
+                   value="{{ settings.training_timeout }}" min="1">
+        </div>
+        <div class="form-group">
+            <label for="test_timeout">Test Timeout (seconds)</label>
+            <input type="number" id="test_timeout" name="test_timeout"
+                   value="{{ settings.test_timeout }}" min="1">
+        </div>
+        <div class="form-group">
+            <label for="shell_command_timeout">Shell Command Timeout (seconds)</label>
+            <input type="number" id="shell_command_timeout" name="shell_command_timeout"
+                   value="{{ settings.shell_command_timeout }}" min="1">
+        </div>
+        <div class="form-group">
+            <label for="python_file_timeout">Python File Timeout (seconds)</label>
+            <input type="number" id="python_file_timeout" name="python_file_timeout"
+                   value="{{ settings.python_file_timeout }}" min="1">
+        </div>
+    </div>
+
+    <!-- Truncation / Context Limits -->
+    <div class="card">
+        <h3 class="card-section-heading">Truncation / Context Limits</h3>
+        <div class="form-group">
+            <label for="command_output_max_chars">Command Output Max Chars</label>
+            <input type="number" id="command_output_max_chars" name="command_output_max_chars"
+                   value="{{ settings.command_output_max_chars }}" min="100">
+        </div>
+        <div class="form-group">
+            <label for="test_output_max_chars">Test Output Max Chars</label>
+            <input type="number" id="test_output_max_chars" name="test_output_max_chars"
+                   value="{{ settings.test_output_max_chars }}" min="100">
+        </div>
+        <div class="form-group">
+            <label for="test_error_max_chars">Test Error Max Chars</label>
+            <input type="number" id="test_error_max_chars" name="test_error_max_chars"
+                   value="{{ settings.test_error_max_chars }}" min="100">
+        </div>
+        <div class="form-group">
+            <label for="testing_llm_context_truncation">Testing LLM Context Truncation (chars)</label>
+            <input type="number" id="testing_llm_context_truncation" name="testing_llm_context_truncation"
+                   value="{{ settings.testing_llm_context_truncation }}" min="100">
+        </div>
+        <div class="form-group">
+            <label for="review_file_truncation">Review File Truncation (chars)</label>
+            <input type="number" id="review_file_truncation" name="review_file_truncation"
+                   value="{{ settings.review_file_truncation }}" min="100">
+        </div>
+        <div class="form-group">
+            <label for="analysis_log_truncation">Analysis Log Truncation (chars)</label>
+            <input type="number" id="analysis_log_truncation" name="analysis_log_truncation"
+                   value="{{ settings.analysis_log_truncation }}" min="100">
+        </div>
+    </div>
+
+    <!-- Logging -->
+    <div class="card">
+        <h3 class="card-section-heading">Logging</h3>
+        <div class="form-group">
+            <label for="log_level">Log Level</label>
+            <select id="log_level" name="log_level">
+                {% for lvl in ["SILENT", "ERROR", "INFO", "DEBUG", "VERBOSE"] %}
+                <option value="{{ lvl }}" {% if settings.log_level == lvl %}selected{% endif %}>{{ lvl }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <div class="settings-actions">
+        <button type="submit" class="btn btn-primary">Save Settings</button>
+        <button type="button" class="btn" id="reset-defaults-btn">Reset to Defaults</button>
+    </div>
+</form>
+
+<div id="save-toast" class="save-toast">Settings saved</div>
+
+<script>
+const DEFAULTS = {
+    model_provider: "",
+    model_name: "",
+    max_tokens: 65536,
+    max_tool_iterations: 30,
+    max_tool_iterations_training: 15,
+    max_code_review_retries: 10,
+    max_training_analysis_retries: 5,
+    llm_call_retries: 3,
+    training_timeout: 360000,
+    test_timeout: 60,
+    shell_command_timeout: 30,
+    python_file_timeout: 30,
+    command_output_max_chars: 4000,
+    test_output_max_chars: 2000,
+    test_error_max_chars: 1000,
+    testing_llm_context_truncation: 3000,
+    review_file_truncation: 3000,
+    analysis_log_truncation: 5000,
+    log_level: "INFO"
+};
+
+const MODEL_DEFAULTS = {
+    openai: "gpt-5-mini",
+    openrouter: "google/gemini-3-flash-preview",
+    local: "",  // filled via API autodiscovery
+    "": ""      // auto-detect: leave empty
+};
+
+// Radio button: auto-fill model name on provider change
+document.querySelectorAll('input[name="model_provider"]').forEach(radio => {
+    radio.addEventListener("change", async function() {
+        const provider = this.value;
+        const modelInput = document.getElementById("model_name");
+        if (provider === "local") {
+            modelInput.value = "discovering...";
+            try {
+                const resp = await fetch("/api/local-model-name");
+                const data = await resp.json();
+                modelInput.value = data.model || "local-model";
+            } catch {
+                modelInput.value = "local-model";
+            }
+        } else {
+            modelInput.value = MODEL_DEFAULTS[provider] || "";
+        }
+    });
+});
+
+document.getElementById("reset-defaults-btn").addEventListener("click", function() {
+    for (const [key, val] of Object.entries(DEFAULTS)) {
+        if (key === "model_provider") {
+            document.querySelectorAll('input[name="model_provider"]').forEach(r => {
+                r.checked = (r.value === val);
+            });
+        } else {
+            const el = document.getElementById(key);
+            if (el) el.value = val;
+        }
+    }
+});
+
+document.getElementById("settings-form").addEventListener("submit", async function(e) {
+    e.preventDefault();
+    const data = {};
+    for (const key of Object.keys(DEFAULTS)) {
+        if (key === "model_provider") {
+            const checked = document.querySelector('input[name="model_provider"]:checked');
+            data[key] = checked ? checked.value : "";
+        } else {
+            const el = document.getElementById(key);
+            if (!el) continue;
+            if (el.type === "number") {
+                data[key] = parseInt(el.value, 10);
+            } else {
+                data[key] = el.value;
+            }
+        }
+    }
+    try {
+        const resp = await fetch("/api/settings", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(data)
+        });
+        if (resp.ok) {
+            const toast = document.getElementById("save-toast");
+            toast.classList.add("visible");
+            setTimeout(() => toast.classList.remove("visible"), 2000);
+        }
+    } catch (err) {
+        console.error("Save failed", err);
+    }
+});
+</script>
+{% endblock %}

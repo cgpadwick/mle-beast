@@ -1,0 +1,38 @@
+version: "1.0"
+
+project:
+  name: sentiment_existing
+  description: >
+    Improve an existing sentiment classification model. Existing code provides
+    a baseline bag-of-words model, training, evaluation, and tests.
+
+goals:
+  task_type: improve_existing
+  task_description: >
+    Improve the existing sentiment classifier to achieve at least 95%
+    accuracy on the test set. The existing code has a simple bag-of-words
+    model with an MLP classifier. Review the code, identify improvements,
+    and modify the existing files using edit_file.
+    Data is in JSONL format: data/train/ and data/test/ subdirectories,
+    each containing positive.jsonl and negative.jsonl files.
+    Each line is a JSON object with "text" and "label" fields.
+    300 training samples (150 per class) and 100 test samples (50 per class).
+    Do NOT create versioned files — edit existing files directly.
+    Note: this is a small synthetic dataset where a simple tfidf +
+    logistic regression already reaches ~0.99; the 0.95 target is
+    a sanity bar rather than a research challenge.
+  target_metric:
+    name: accuracy
+    target_value: 0.95
+    comparison: ">="
+
+dataset:
+  type: text_classification
+  train_path: train
+  test_path: test
+
+workspace:
+  existing_code: true
+  environment:
+    type: venv
+    path: venv

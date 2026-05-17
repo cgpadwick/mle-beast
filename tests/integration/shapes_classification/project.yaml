@@ -1,0 +1,26 @@
+version: "1.0"
+
+project:
+  name: shapes_classification
+  description: >
+    Image classification of synthetic geometric shapes (circle, square, triangle).
+    A simple 3-class classification task for testing image classification workflows.
+
+goals:
+  task_type: new_architecture
+  task_description: >
+    Build an image classifier for this dataset.
+  target_metric:
+    name: accuracy
+    target_value: 0.85
+    comparison: ">="
+
+dataset:
+  type: image_classification
+  train_path: train
+  test_path: test
+
+workspace:
+  environment:
+    type: venv
+    path: venv

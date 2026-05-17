@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}Admin — MLE-Beast{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Admin</h1>
+</div>
+
+<!-- Database Stats -->
+<div class="card">
+    <h3 class="card-section-heading">Database Stats</h3>
+    <div class="stat-grid">
+        <div class="stat-item">
+            <div class="stat-value">{{ stats.runs_count }}</div>
+            <div class="stat-label">Runs</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">{{ stats.stages_count }}</div>
+            <div class="stat-label">Stages</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">{{ stats.events_count }}</div>
+            <div class="stat-label">Events</div>
+        </div>
+        <div class="stat-item">
+            {% if stats.db_size_bytes >= 1048576 %}
+            <div class="stat-value">{{ "%.1f"|format(stats.db_size_bytes / 1048576) }} MB</div>
+            {% else %}
+            <div class="stat-value">{{ "%.0f"|format(stats.db_size_bytes / 1024) }} KB</div>
+            {% endif %}
+            <div class="stat-label">DB Size</div>
+        </div>
+    </div>
+    {% if stats.runs_by_status %}
+    <div class="stat-breakdown">
+        {% for status, count in stats.runs_by_status.items() %}
+        <span class="badge {{ status_badge_class(status) }}">{{ status }}: {{ count }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Cleanup -->
+<div class="card">
+    <h3 class="card-section-heading">Cleanup</h3>
+    <div class="form-group">
+        <label>Delete Old Runs</label>
+        <div class="help-text">Remove runs and their associated stages/events older than a given number of days.</div>
+    </div>
+    <div class="admin-action-row">
+        <span class="admin-action-label">Older than</span>
+        <input type="number" id="cleanup-days" class="admin-input-sm" value="30" min="0">
+        <span class="admin-action-label">days</span>
+        <button class="btn btn-danger" id="cleanup-btn">Delete Old Runs</button>
+        <span class="admin-result" id="cleanup-result"></span>
+    </div>
+</div>
+
+<!-- Danger Zone -->
+<div class="card">
+    <h3 class="card-section-heading">Danger Zone</h3>
+    <div class="danger-zone">
+        <div class="form-group">
+            <label>Reset Database</label>
+            <div class="help-text">Permanently deletes <strong>all</strong> runs, stages, and events. Settings are preserved.</div>
+        </div>
+        <div class="admin-action-row">
+            <input type="text" id="reset-confirm" class="admin-input-confirm"
+                   placeholder='Type RESET to confirm' autocomplete="off">
+            <button class="btn btn-danger" id="reset-btn" disabled>Reset Database</button>
+            <span class="admin-result" id="reset-result"></span>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById("reset-confirm").addEventListener("input", function() {
+    document.getElementById("reset-btn").disabled = (this.value !== "RESET");
+});
+
+document.getElementById("cleanup-btn").addEventListener("click", async function() {
+    const days = parseInt(document.getElementById("cleanup-days").value, 10);
+    const result = document.getElementById("cleanup-result");
+    this.disabled = true;
+    try {
+        const resp = await fetch("/api/admin/delete-old-runs", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({days})
+        });
+        const data = await resp.json();
+        result.textContent = `Deleted ${data.deleted} run(s)`;
+        result.className = "admin-result success";
+        setTimeout(() => location.reload(), 1500);
+    } catch (err) {
+        result.textContent = "Failed: " + err.message;
+        result.className = "admin-result error";
+        this.disabled = false;
+    }
+});
+
+document.getElementById("reset-btn").addEventListener("click", async function() {
+    const confirm = document.getElementById("reset-confirm").value;
+    const result = document.getElementById("reset-result");
+    this.disabled = true;
+    try {
+        const resp = await fetch("/api/admin/reset-database", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({confirm})
+        });
+        if (resp.ok) {
+            result.textContent = "Database reset. Reloading...";
+            result.className = "admin-result success";
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            const data = await resp.json();
+            result.textContent = data.error || "Failed";
+            result.className = "admin-result error";
+            this.disabled = false;
+        }
+    } catch (err) {
+        result.textContent = "Failed: " + err.message;
+        result.className = "admin-result error";
+        this.disabled = false;
+    }
+});
+</script>
+{% endblock %}

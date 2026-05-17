@@ -1,0 +1,32 @@
+version: "1.0"
+
+project:
+  name: churn_quick
+  description: >
+    Quick smoke test for workflow validation. Small churn dataset
+    where a simple MLP or tabular model can reasonably hit ~0.72.
+
+goals:
+  task_type: new_architecture
+  task_description: >
+    Build a MINIMAL model to predict customer churn. Requirements:
+    - Use a simple 2-3 layer MLP with standard PyTorch nn.Linear layers
+    - Single model version only (model_v1)
+    - Minimal code: model.py, train.py, and basic tests
+    - Schema: train.csv and test.csv both have columns
+      (age, account_length, plan, churned). One-hot encode `plan`
+      since it is categorical.
+  target_metric:
+    name: accuracy
+    target_value: 0.70
+    comparison: ">="
+
+dataset:
+  type: tabular
+  train_path: train.csv
+  test_path: test.csv
+
+workspace:
+  environment:
+    type: venv
+    path: venv

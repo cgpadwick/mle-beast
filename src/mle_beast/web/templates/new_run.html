@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}New Run — MLE-Beast{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>New Pipeline Run</h1>
+</div>
+
+<div class="card" style="max-width: 640px;">
+    <form id="new-run-form">
+        <div class="form-group">
+            <label for="workspace">Workspace Path</label>
+            <input type="text" id="workspace" name="workspace" required
+                   placeholder="/path/to/workspace">
+            <div class="help-text">Directory where the pipeline will create/edit files.</div>
+        </div>
+
+        <div class="form-group">
+            <label for="task">Task Description</label>
+            <textarea id="task" name="task" required
+                      placeholder="Describe the ML task..."></textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="target_accuracy">Target Accuracy</label>
+            <input type="number" id="target_accuracy" name="target_accuracy"
+                   step="0.01" min="0" max="1" placeholder="0.55">
+            <div class="help-text">Optional. The accuracy threshold to aim for.</div>
+        </div>
+
+        <div class="form-group">
+            <label for="dataset_path">Dataset Path</label>
+            <input type="text" id="dataset_path" name="dataset_path"
+                   placeholder="/path/to/dataset">
+            <div class="help-text">Optional. Path to the dataset directory or file.</div>
+        </div>
+
+        <div class="form-group">
+            <label for="mode">Mode</label>
+            <select id="mode" name="mode">
+                <option value="greenfield">Greenfield (new project)</option>
+                <option value="existing">Existing Code (improve in place)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <div class="checkbox-group">
+                <input type="checkbox" id="force_cpu" name="force_cpu">
+                <label for="force_cpu" style="margin-bottom: 0;">Force CPU</label>
+            </div>
+            <div class="help-text">Default uses GPU when one is detected. Check this only to force CPU (e.g. headless CI, flaky CUDA).</div>
+        </div>
+
+        <div class="form-group">
+            <div class="checkbox-group">
+                <input type="checkbox" id="setup_workspace" name="setup_workspace">
+                <label for="setup_workspace" style="margin-bottom: 0;">Set up workspace</label>
+            </div>
+            <div class="help-text">Create directory structure before running.</div>
+        </div>
+
+        <div class="help-text" style="margin-bottom: 12px;">
+            Advanced settings (timeouts, retries, truncation) use
+            <a href="/settings">global defaults</a>.
+        </div>
+
+        <button type="submit" class="btn btn-primary">Start Run</button>
+    </form>
+</div>
+
+<script>
+document.getElementById('new-run-form').addEventListener('submit', async function(evt) {
+    evt.preventDefault();
+    const form = evt.target;
+    const formData = new FormData(form);
+
+    // Build the JSON payload that matches CreateRunRequest in routes.py.
+    const payload = {
+        workspace: formData.get('workspace') || '',
+        task: formData.get('task') || '',
+        target_accuracy: formData.get('target_accuracy')
+            ? parseFloat(formData.get('target_accuracy'))
+            : null,
+        dataset_path: formData.get('dataset_path') || null,
+        mode: formData.get('mode') || 'greenfield',
+        force_cpu: formData.has('force_cpu'),
+        setup_workspace: formData.has('setup_workspace'),
+    };
+
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Starting...';
+
+    try {
+        const resp = await fetch('/api/runs', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload),
+        });
+        const body = await resp.json();
+        if (resp.ok && body.redirect) {
+            window.location.href = body.redirect;
+            return;
+        }
+        // Surface the validation error so the user can see what's wrong.
+        alert('Failed to start run: ' + JSON.stringify(body, null, 2));
+    } catch (err) {
+        alert('Network error: ' + err.message);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Start Run';
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% if runs %}
+<div class="card" style="padding: 0; overflow: hidden;">
+    <table class="run-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Status</th>
+                <th>Task</th>
+                <th>Workspace</th>
+                <th>Created</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for run in runs %}
+            <tr style="cursor: pointer;" onclick="window.location.href='/runs/{{ run.id }}'">
+                <td class="id-cell">{{ run.id[:8] }}</td>
+                <td>
+                    <span class="badge {{ status_badge_class(run.status) }}">{{ run.status }}</span>
+                </td>
+                <td class="task-cell">{{ run.task[:60] }}{% if run.task|length > 60 %}...{% endif %}</td>
+                <td style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-muted);">
+                    {{ run.workspace }}
+                </td>
+                <td style="color: var(--text-muted); font-size: 0.85rem; white-space: nowrap;">
+                    {{ ts_to_str(run.created_at) }}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state">
+    <h3>No pipeline runs yet</h3>
+    <p>Start a new run from the web UI or use the CLI.</p>
+    <a href="/runs/new" class="btn btn-primary" style="margin-top: 16px;">+ New Run</a>
+</div>
+{% endif %}
