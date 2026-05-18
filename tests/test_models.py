@@ -10,15 +10,11 @@ from mle_beast.models.tool_calls import (
     CodingToolCall,
     ExistingCodeToolCall,
     TrainingToolCall,
-    WriteFileArgs,
-    ReadFileArgs,
-    MarkCompleteArgs,
 )
 from mle_beast.models.verdicts import (
     AnalysisVerdict,
     TestVerdict,
 )
-
 
 # ---- tool_calls ----
 

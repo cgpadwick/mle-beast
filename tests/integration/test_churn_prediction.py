@@ -16,8 +16,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from tests.integration.conftest import run_pipeline_via_manager
 from mle_beast.workspace import WorkspaceCreator, WorkspaceRegistry
+from tests.integration.conftest import run_pipeline_via_manager
 
 pytestmark = pytest.mark.skipif(
     not (

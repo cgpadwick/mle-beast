@@ -30,7 +30,6 @@ from mle_beast.models.tool_calls import FinderToolCall
 from mle_beast.nodes.base import BaseActorNode, BaseCriticNode, _emit, _get_run_id
 from mle_beast.prompts.finder import FINDER_SYSTEM_PROMPT
 
-
 # ---------------------------------------------------------------------------
 # Actor
 # ---------------------------------------------------------------------------

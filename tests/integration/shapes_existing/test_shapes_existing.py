@@ -19,8 +19,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from tests.integration.conftest import prep_brownfield_venv, run_pipeline_via_manager
 from mle_beast.workspace import WorkspaceRegistry
+from tests.integration.conftest import prep_brownfield_venv, run_pipeline_via_manager
 
 pytestmark = pytest.mark.skipif(
     not (

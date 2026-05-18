@@ -16,6 +16,7 @@ from unittest.mock import patch
 import pytest
 
 from mle_beast.models.tool_calls import CodingToolCall, ProposalToolCall
+from mle_beast.models.verdicts import TestVerdict
 from mle_beast.nodes.baseline import BaselineActorNode
 from mle_beast.nodes.hillclimb_test import HillClimbTestingCriticNode
 from mle_beast.nodes.implement import ImplementActorNode
@@ -24,7 +25,6 @@ from mle_beast.nodes.proposal import (
     ProposalCriticNode,
     ProposalVerdict,
 )
-from mle_beast.models.verdicts import TestVerdict
 
 
 @pytest.fixture

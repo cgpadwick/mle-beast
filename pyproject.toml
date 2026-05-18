@@ -33,6 +33,10 @@ web = [
     "uvicorn[standard]>=0.28",
     "python-multipart",
 ]
+dev = [
+    "ruff>=0.6",
+    "pytest-cov>=5.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/cgpadwick/mle-beast"
@@ -55,3 +59,42 @@ markers = [
     "timeout: test timeout in seconds",
 ]
 norecursedirs = ["templates"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = [
+    "tests/integration/*/templates",
+    "prototypes",
+]
+
+[tool.ruff.lint]
+# E,W: pycodestyle errors/warnings. F: pyflakes. I: isort. B: flake8-bugbear.
+# UP: pyupgrade. Lenient enough to not be hostile; strict enough to catch
+# real issues (unused imports, mutable default args, deprecated syntax).
+select = ["E", "W", "F", "I", "B", "UP"]
+ignore = [
+    "E501",  # line too long — handled by formatter
+    "B008",  # function call in default arg — FastAPI uses Query(...) etc.
+    "UP006", # use list[...] instead of List[...] — sweep separately
+    "UP007", # use X | Y instead of Union — sweep separately
+    "UP035", # typing.X deprecated — sweep separately
+    "UP045", # use X | None instead of Optional[X] — sweep separately
+]
+
+[tool.coverage.run]
+source = ["src/mle_beast"]
+omit = [
+    "src/mle_beast/web/templates/*",
+    "*/tests/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+show_missing = true
+skip_covered = false

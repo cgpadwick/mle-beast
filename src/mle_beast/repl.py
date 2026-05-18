@@ -12,8 +12,6 @@ CLI runs are persisted in SQLite and can be viewed on the web UI.
 from __future__ import annotations
 
 import sys
-from datetime import datetime
-from typing import Optional
 
 from mle_beast.events import LogMessage, PipelineEvent, get_event_bus
 from mle_beast.run_manager import RunConfig, get_run_manager
@@ -22,7 +20,6 @@ from mle_beast.run_manager import RunConfig, get_run_manager
 def _cli_event_printer(event: PipelineEvent) -> None:
     """Sync subscriber that prints events to stdout (preserves CLI behavior)."""
     from mle_beast.events import (
-        EventType,
         RetryOccurred,
         RunStateChanged,
         StageCompleted,

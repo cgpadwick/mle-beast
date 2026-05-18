@@ -13,7 +13,6 @@ import re
 import shlex
 import subprocess
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
@@ -365,7 +364,7 @@ def launch_training(
                             print(f"  [TrainingMonitor] BASELINE VIOLATION at epoch "
                                   f"{epochs_seen}: score {score:.4f} < "
                                   f"threshold {min_acceptable_score:.4f}")
-                            print(f"  [TrainingMonitor] Terminating training early.")
+                            print("  [TrainingMonitor] Terminating training early.")
                             process.kill()
                             baseline_violation_detected = True
                             break
@@ -384,7 +383,7 @@ def launch_training(
                 f"- Data preprocessing matches the pretrained model's requirements"
             )
         elif process.returncode == 0:
-            summary.append(f"Training completed (exit code: 0)")
+            summary.append("Training completed (exit code: 0)")
         else:
             summary.append(f"Training FAILED (exit code: {process.returncode})")
 
