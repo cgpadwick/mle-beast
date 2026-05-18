@@ -29,12 +29,7 @@ from mle_beast.events import (
     StageStarted,
     ToolExecuted,
 )
-from mle_beast.llm import (
-    emit_llm_call_event,
-    get_client,
-    get_model_name,
-    max_tokens_kwarg,
-)
+from mle_beast.llm import emit_llm_call_event, get_client, get_model_name, max_tokens_kwarg
 from mle_beast.settings import Settings
 from mle_beast.tools.registry import execute_tool
 
