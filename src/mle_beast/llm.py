@@ -44,9 +44,10 @@ _HTTP_TIMEOUT = httpx.Timeout(connect=10.0, read=180.0, write=60.0, pool=10.0)
 def _make_openai_client(*, base_url: str | None = None, api_key: str) -> OpenAI:
     """Build an OpenAI client with our shared timeout + retry policy.
 
-    We set max_retries=2 (not the SDK default of 2 either — being explicit)
-    so a single hung request times out at 180s and we re-issue automatically
-    instead of dead-ending the run.
+    We set max_retries=2 explicitly (this currently matches the SDK
+    default, but we do not want to depend on that) so a single hung
+    request times out at 180s and we re-issue automatically instead of
+    dead-ending the run.
     """
     kwargs: dict = {
         "api_key": api_key,
