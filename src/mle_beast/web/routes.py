@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -152,7 +153,7 @@ def register_routes(app: FastAPI) -> None:
         run_id = manager.create_run(config)
         manager.start_run(run_id)
         return JSONResponse(
-            {"id": run_id, "status": "running", "redirect": f"/runs/{run_id}"},
+            {"id": run_id, "status": "running"},
             status_code=201,
         )
 
@@ -175,12 +176,6 @@ def register_routes(app: FastAPI) -> None:
         if not ok:
             raise HTTPException(status_code=400, detail="Run not cancellable")
         return {"status": "cancelled"}
-
-    @app.get("/api/runs/{run_id}/logs")
-    async def api_get_logs(run_id: str, since: Optional[float] = Query(None)):
-        manager = get_run_manager()
-        events = manager.get_events(run_id, since=since)
-        return events
 
     @app.get("/api/runs/{run_id}/experiments")
     async def api_get_experiments(run_id: str):
@@ -227,8 +222,6 @@ def register_routes(app: FastAPI) -> None:
         experiments it tried, what it expected, and what worked. Each
         BaselineEvalNode / HillClimbEvalNode iteration appends a section.
         """
-        from pathlib import Path
-        from fastapi.responses import JSONResponse
         manager = get_run_manager()
         run = manager.get_run(run_id)
         if not run:
@@ -250,8 +243,6 @@ def register_routes(app: FastAPI) -> None:
         this is effectively the run's "what survived" history.
         """
         import subprocess
-        from pathlib import Path
-        from fastapi.responses import JSONResponse
         manager = get_run_manager()
         run = manager.get_run(run_id)
         if not run:
@@ -318,8 +309,6 @@ def register_routes(app: FastAPI) -> None:
         If the file doesn't exist yet (training hasn't started), returns
         exists=false so the UI can show a friendly "waiting" state.
         """
-        from pathlib import Path
-        from fastapi.responses import JSONResponse
         manager = get_run_manager()
         run = manager.get_run(run_id)
         if not run:
@@ -352,7 +341,6 @@ def register_routes(app: FastAPI) -> None:
         live view without reloading the whole log on every poll.
         """
         from mle_beast.run_manager import console_log_path
-        from fastapi.responses import JSONResponse
 
         path = console_log_path(run_id)
         if not path.exists():
