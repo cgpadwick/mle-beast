@@ -5,7 +5,6 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from mle_beast.models.verdicts import AnalysisVerdict, TestVerdict
 from mle_beast.nodes.testing import TestingCriticNode, _parse_pytest_summary

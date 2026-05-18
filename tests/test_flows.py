@@ -7,7 +7,6 @@ These tests verify that flows are correctly wired (node connections)
 without running the actual LLM. They check structure, not behavior.
 """
 
-import pytest
 
 from pocketflow import Flow
 

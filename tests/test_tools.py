@@ -8,18 +8,17 @@ from pathlib import Path
 
 from mle_beast.tools.file_ops import (
     create_directory,
+    download_url,
     edit_file,
     list_files,
     read_file,
     write_file,
 )
 from mle_beast.tools.registry import execute_tool
+from mle_beast.workspace import WorkspaceRegistry
 from mle_beast.models.tool_calls import (
     WriteFileArgs,
     ReadFileArgs,
-    EditFileArgs,
-    ListFilesArgs,
-    CreateDirectoryArgs,
     MarkCompleteArgs,
 )
 
@@ -47,6 +46,28 @@ class TestReadFile:
         assert "ERROR" in result
 
 
+class TestReadFileExtra:
+    def test_truncates_large_files(self, workspace):
+        """Reads over MAX_READ_CHARS get a truncation suffix."""
+        from mle_beast.tools.file_ops import MAX_READ_CHARS
+        big = "x" * (MAX_READ_CHARS + 1000)
+        (workspace / "big.txt").write_text(big)
+        result = read_file("big.txt")
+        assert "TRUNCATED" in result
+        assert f"first {MAX_READ_CHARS:,}" in result
+
+    def test_handles_read_exception(self, workspace, monkeypatch):
+        """If reading raises, we surface a string ERROR (not an exception)."""
+        (workspace / "ok.txt").write_text("ok")
+
+        def boom(*a, **kw):
+            raise PermissionError("simulated")
+
+        monkeypatch.setattr(Path, "read_text", boom)
+        result = read_file("ok.txt")
+        assert "ERROR reading file" in result
+
+
 class TestEditFile:
     def test_edit_replaces_text(self, workspace):
         (workspace / "edit_me.py").write_text("old_value = 1")
@@ -63,6 +84,49 @@ class TestEditFile:
         result = edit_file("missing.py", "a", "b")
         assert "ERROR" in result
 
+    def test_edit_missing_text_long_file_preview_truncates(self, workspace):
+        (workspace / "long.txt").write_text("a" * 800)
+        result = edit_file("long.txt", "NOT_THERE", "x")
+        assert "ERROR" in result
+        # Preview should be capped at ~500 + "..." suffix.
+        assert "..." in result
+
+
+class TestPathResolution:
+    """_resolve guards against path traversal and respects allowed-read paths."""
+
+    def test_write_outside_workspace_blocked(self, workspace, tmp_path):
+        outside = tmp_path / "elsewhere" / "evil.txt"
+        with pytest.raises(ValueError, match="Path traversal"):
+            write_file(str(outside), "nope")
+
+    def test_read_outside_workspace_blocked_without_allowlist(self, workspace, tmp_path):
+        outside = tmp_path / "secrets.txt"
+        outside.write_text("nope")
+        with pytest.raises(ValueError, match="Path traversal"):
+            read_file(str(outside))
+
+    def test_read_outside_workspace_allowed_with_explicit_path(self, workspace, tmp_path):
+        outside_dir = tmp_path / "data"
+        outside_dir.mkdir()
+        outside_file = outside_dir / "ok.txt"
+        outside_file.write_text("permitted")
+        WorkspaceRegistry.add_allowed_read_path(outside_dir)
+        result = read_file(str(outside_file))
+        assert result == "permitted"
+
+    def test_write_via_symlink_escape_blocked(self, workspace, tmp_path):
+        """A symlink pointing outside the workspace must not let writes escape.
+
+        Reads via the same symlink are allowed (they only expose the linked
+        content, no privilege escalation); writes go through the realpath check.
+        """
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (workspace / "linked").symlink_to(outside)
+        with pytest.raises(ValueError, match="path traversal"):
+            write_file("linked/evil.txt", "should-be-blocked")
+
 
 class TestListFiles:
     def test_list_root(self, workspace):
@@ -78,6 +142,66 @@ class TestListFiles:
         result = list_files("", "*.py")
         assert "a.py" in result
         assert "b.txt" not in result
+
+    def test_list_missing_directory(self, workspace):
+        result = list_files("does/not/exist")
+        assert "ERROR" in result and "not found" in result
+
+    def test_list_includes_subdir_entries_and_files(self, workspace):
+        (workspace / "sub").mkdir()
+        (workspace / "leaf.py").write_text("x")
+        result = list_files()
+        assert "[DIR]" in result and "sub/" in result
+        assert "[FILE]" in result and "leaf.py" in result
+
+    def test_list_no_matches_returns_helpful_message(self, workspace):
+        result = list_files("", "*.nothing")
+        assert "No files matching" in result
+
+
+class TestDownloadUrl:
+    def test_writes_file_and_reports_size(self, workspace, monkeypatch):
+        """download_url chunks into the destination and reports MB transferred.
+
+        We monkeypatch urllib.request.urlopen so the test doesn't make a real
+        network call.
+        """
+        from io import BytesIO
+
+        payload = b"x" * (8192 * 3 + 100)  # exercise the chunk loop
+
+        class _FakeResp:
+            def __init__(self, data: bytes):
+                self._buf = BytesIO(data)
+
+            def read(self, n: int) -> bytes:
+                return self._buf.read(n)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        def fake_urlopen(url, timeout=60):
+            return _FakeResp(payload)
+
+        import urllib.request
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+        result = download_url("http://example.com/foo.bin", "downloaded.bin")
+        assert "Downloaded" in result and "MB" in result
+        assert (workspace / "downloaded.bin").read_bytes() == payload
+
+    def test_reports_error_on_failure(self, workspace, monkeypatch):
+        import urllib.request
+
+        def boom(url, timeout=60):
+            raise OSError("network unreachable")
+
+        monkeypatch.setattr(urllib.request, "urlopen", boom)
+        result = download_url("http://example.com/foo.bin", "f.bin")
+        assert "ERROR downloading" in result
 
 
 class TestCreateDirectory:
