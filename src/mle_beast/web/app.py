@@ -47,8 +47,16 @@ def create_app() -> FastAPI:
     register_routes(app)
 
     # Mount the React SPA at /. FastAPI route matching prefers the more
-    # specific /api/* routes over this catchall, and StaticFiles(html=True)
-    # falls back to index.html for any unmatched path — that's SPA routing.
+    # specific /api/* routes over this catchall, so the API still works.
+    # `html=True` makes a request for "/" serve index.html (the SPA's
+    # entry point); the React app then does its own client-side state
+    # routing from there — we don't have URL-based routing yet.
+    #
+    # NOTE: Starlette's StaticFiles(html=True) does NOT fall back to
+    # index.html for arbitrary deep links like /runs/<uuid>; those still
+    # 404. That's fine today because nothing in the dashboard relies on
+    # deep links, but if we ever add React Router we'll need a custom
+    # 404 → index.html handler.
     #
     # Skipped when the static dir doesn't exist (developer ran without
     # `npm run build`). In that case the dev workflow is: Vite on :5173,

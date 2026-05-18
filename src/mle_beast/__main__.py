@@ -85,35 +85,49 @@ def main() -> None:
         run_repl()
         return
 
-    try:
-        from mle_beast.web.server import start_web
-    except ImportError:
+    # SSL: both cert and key, or neither. uvicorn would fail with a less
+    # obvious error if only one is given.
+    if bool(args.ssl_cert) ^ bool(args.ssl_key):
         print(
-            "Error: web dependencies not installed.\n"
-            "Install with: pip install 'mle-beast[web]'\n"
-            "Or run without the dashboard: mle-beast --no-web",
+            "Error: --ssl-cert and --ssl-key must be provided together "
+            "(or neither, for HTTP).",
             file=sys.stderr,
         )
-        sys.exit(1)
+        sys.exit(2)
 
+    # Build the URL the browser should open. When the user binds to all
+    # interfaces (0.0.0.0 / ::) we can't actually open a local browser
+    # at that "host" — substitute the loopback equivalent. The server
+    # still binds to whatever the user asked for.
+    browser_host = args.host
+    if args.host in ("0.0.0.0", ""):
+        browser_host = "127.0.0.1"
+    elif args.host in ("::", "::0"):
+        browser_host = "[::1]"
     scheme = "https" if args.ssl_cert else "http"
-    url = f"{scheme}://{args.host}:{args.port}"
+    url = f"{scheme}://{browser_host}:{args.port}"
 
     if not args.no_browser:
         _open_browser_when_ready(url)
 
     try:
+        from mle_beast.web.server import start_web
         start_web(
             host=args.host,
             port=args.port,
             ssl_certfile=args.ssl_cert,
             ssl_keyfile=args.ssl_key,
         )
-    except (ModuleNotFoundError, ImportError):
+    except (ModuleNotFoundError, ImportError) as e:
+        # FastAPI/uvicorn are deferred imports inside server.py, so any
+        # missing extras don't surface until start_web() actually runs.
+        # Catch here so the [web]-extras install message is what users
+        # see instead of a bare traceback.
         print(
             "Error: web dependencies not installed.\n"
             "Install with: pip install 'mle-beast[web]'\n"
-            "Or run without the dashboard: mle-beast --no-web",
+            "Or run without the dashboard: mle-beast --no-web\n"
+            f"(import failed: {e})",
             file=sys.stderr,
         )
         sys.exit(1)

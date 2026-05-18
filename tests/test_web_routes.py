@@ -191,6 +191,72 @@ class TestAppFactory:
         assert r.headers.get("access-control-allow-origin") == "*"
 
 
+class TestSpaMount:
+    """The static React SPA mount, conditional on the built dir existing.
+
+    These tests cover the auto-launch-dashboard PR: serving the bundled
+    SPA at "/" alongside the JSON API at "/api/*".
+    """
+
+    def _has_built_spa(self) -> bool:
+
+        from mle_beast.web import app as app_mod
+        return app_mod._STATIC_DIR.exists() and (
+            app_mod._STATIC_DIR / "index.html"
+        ).exists()
+
+    def test_root_serves_spa_index_html_when_bundled(self, client):
+        """In bundled mode, GET / returns the React SPA shell."""
+        if not self._has_built_spa():
+            pytest.skip("SPA not built; run `cd prototypes/dashboard && npm run build`")
+        r = client.get("/")
+        assert r.status_code == 200
+        body = r.text
+        assert "<html" in body.lower()
+        # The SPA mounts a #root div which React hydrates into.
+        assert 'id="root"' in body
+
+    def test_api_routes_still_match_under_spa_mount(self, client):
+        """The static catchall at / must NOT shadow the more-specific
+        /api/* routes — FastAPI route matching is longest-prefix-wins.
+        Regression test for the auto-launch-dashboard PR.
+        """
+        r = client.get("/api/runs")
+        assert r.status_code == 200
+        assert r.headers["content-type"].startswith("application/json")
+        assert r.json() == []  # fake_manager has no runs
+
+    def test_unknown_api_route_404s_without_falling_through(self, client):
+        """A request to /api/<nonexistent> should be a clean 404 from the
+        API layer, not a fallback into the static handler returning
+        index.html. The latter would mask typos in the React app's URLs.
+        """
+        r = client.get("/api/does-not-exist")
+        assert r.status_code == 404
+        # Must be the API's JSON 404, not the SPA index.html.
+        assert "<html" not in r.text.lower()
+
+    def test_static_mount_absent_when_bundle_missing(self, monkeypatch, tmp_path):
+        """If the static dir hasn't been built (fresh `git clone` before
+        `npm run build`), create_app() should boot without the SPA mount
+        and the API should still serve normally.
+        """
+        from mle_beast.web import app as app_mod
+
+        # Point _STATIC_DIR at an empty tmp dir so the existence check fails.
+        monkeypatch.setattr(app_mod, "_STATIC_DIR", tmp_path / "nope")
+        # Recreate the app so the new _STATIC_DIR takes effect.
+        new_app = app_mod.create_app()
+        # Mount routes have type 'Mount'; APIRoutes don't. The catchall
+        # we conditionally add at "/" is the only Mount we install.
+        from starlette.routing import Mount
+        assert not any(isinstance(r, Mount) for r in new_app.routes)
+        # The API routes are still there.
+        from fastapi.testclient import TestClient
+        c = TestClient(new_app)
+        assert c.get("/api/runs").status_code == 200
+
+
 # ---------------------------------------------------------------------------
 # /api/runs CRUD
 # ---------------------------------------------------------------------------
