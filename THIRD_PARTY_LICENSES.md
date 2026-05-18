@@ -22,6 +22,25 @@ mle-beast depends on the following open-source packages. Each is governed by its
 | [uvicorn](https://uvicorn.dev/) | BSD-3-Clause | https://uvicorn.dev/ |
 | [python-multipart](https://github.com/Kludex/python-multipart) | Apache-2.0 | https://github.com/Kludex/python-multipart |
 
+## Bundled frontend assets
+
+The Python wheel ships a pre-built React single-page app at `mle_beast/web/static/`. That bundle includes the following third-party libraries (each in its own license-compliant minified form):
+
+| Package | License | Project URL |
+|---|---|---|
+| [react](https://react.dev) | MIT | https://github.com/facebook/react |
+| [react-dom](https://react.dev) | MIT | https://github.com/facebook/react |
+| [scheduler](https://github.com/facebook/react/tree/main/packages/scheduler) | MIT | https://github.com/facebook/react |
+
+Build tooling (not shipped in the bundle, used only at build time):
+
+| Package | License | Project URL |
+|---|---|---|
+| [vite](https://vitejs.dev) | MIT | https://github.com/vitejs/vite |
+| [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react) | MIT | https://github.com/vitejs/vite-plugin-react |
+
+License notices for the libraries embedded in the bundle are preserved inline in the minified JS via the licenses' standard "Copyright … MIT" comment headers. The full license text for each lives in `prototypes/dashboard/node_modules/<pkg>/LICENSE` after `npm install`.
+
 ## Regeneration
 
 To regenerate this file (e.g., after adding a dependency):
