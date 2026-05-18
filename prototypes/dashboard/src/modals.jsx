@@ -1,5 +1,7 @@
 // Modal dialogs: run details + event details.
 
+import { useEffect } from "react";
+
 import { Card, Row, DetailRow } from "./primitives.jsx";
 import { JsonView } from "./JsonView.jsx";
 import { fmtAbsTime, fmtDuration, fmtScore } from "./format.js";
