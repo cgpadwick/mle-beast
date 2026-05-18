@@ -20,7 +20,6 @@ mle-beast depends on the following open-source packages. Each is governed by its
 |---|---|---|
 | [fastapi](https://github.com/fastapi/fastapi) | MIT | https://github.com/fastapi/fastapi |
 | [uvicorn](https://uvicorn.dev/) | BSD-3-Clause | https://uvicorn.dev/ |
-| [Jinja2](https://github.com/pallets/jinja/) | BSD-3-Clause | https://github.com/pallets/jinja/ |
 | [python-multipart](https://github.com/Kludex/python-multipart) | Apache-2.0 | https://github.com/Kludex/python-multipart |
 
 ## Regeneration
@@ -30,7 +29,7 @@ To regenerate this file (e.g., after adding a dependency):
 ```bash
 pip install pip-licenses
 pip-licenses --packages pocketflow instructor openai litellm pydantic pyyaml pytest \
-                       fastapi uvicorn jinja2 python-multipart \
+                       fastapi uvicorn python-multipart \
              --format=markdown --with-urls
 ```
 

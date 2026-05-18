@@ -1,44 +1,22 @@
 # Copyright 2026 Chris Padwick
 # SPDX-License-Identifier: Apache-2.0
 
-"""REST, SSE, HTML, and HTMX partial endpoints for the web dashboard."""
+"""JSON + SSE endpoints consumed by the React dashboard."""
 
 from __future__ import annotations
 
 import asyncio
-import json
 import time
-from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
 from mle_beast.events import PipelineEvent, get_event_bus
 from mle_beast.run_manager import RunConfig, RunInfo, StageInfo, get_run_manager
 from mle_beast.settings import Settings, get_settings, reload_settings, save_settings
-
-STAGE_ORDER = [
-    "setup",
-    "data_analysis",
-    "data_analysis_critic",
-    "baseline",
-    "testing",
-    "training",
-    "train_finder",
-    "train_finder_critic",
-    "analysis",
-    "evaluate",
-    "eval_finder",
-    "eval_finder_critic",
-    "proposal",
-    "proposal_critic",
-    "implement",
-    "hillclimb_test",
-]
 
 
 # ---------------------------------------------------------------------------
@@ -133,103 +111,11 @@ class StageResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Template helpers
-# ---------------------------------------------------------------------------
-
-def _ts_to_str(ts: Optional[float]) -> str:
-    """Convert a Unix timestamp to a human-readable string."""
-    if ts is None:
-        return ""
-    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-
-
-def _status_badge_class(status: str) -> str:
-    """Return CSS class for a status badge."""
-    return {
-        "pending": "badge-pending",
-        "active": "badge-active",
-        "running": "badge-active",
-        "pass": "badge-pass",
-        "completed": "badge-pass",
-        "fail": "badge-fail",
-        "failed": "badge-fail",
-        "error": "badge-fail",
-        "cancelled": "badge-fail",
-    }.get(status, "badge-pending")
-
-
-# ---------------------------------------------------------------------------
 # Route registration
 # ---------------------------------------------------------------------------
 
-def register_routes(app: FastAPI, templates: Jinja2Templates) -> None:
-    """Register all routes on the FastAPI app."""
-
-    # Add template globals
-    templates.env.globals["ts_to_str"] = _ts_to_str
-    templates.env.globals["status_badge_class"] = _status_badge_class
-    templates.env.globals["stage_order"] = STAGE_ORDER
-
-    # ------------------------------------------------------------------
-    # HTML pages
-    # ------------------------------------------------------------------
-
-    @app.get("/", response_class=HTMLResponse)
-    async def index(request: Request):
-        manager = get_run_manager()
-        runs = manager.list_runs()
-        return templates.TemplateResponse(request, "index.html", {
-            "runs": runs,
-        })
-
-    @app.get("/runs/new", response_class=HTMLResponse)
-    async def new_run_form(request: Request):
-        return templates.TemplateResponse(request, "new_run.html", {})
-
-    @app.get("/runs/{run_id}", response_class=HTMLResponse)
-    async def run_detail(request: Request, run_id: str):
-        manager = get_run_manager()
-        run = manager.get_run(run_id)
-        if not run:
-            raise HTTPException(status_code=404, detail="Run not found")
-        stages = manager.get_stages(run_id)
-        events = manager.get_events(run_id)
-        # Build stage map with ordered stages
-        stage_map = {s.stage_name: s for s in stages}
-        ordered_stages = [stage_map.get(name) for name in STAGE_ORDER]
-        return templates.TemplateResponse(request, "run_detail.html", {
-            "run": run,
-            "stages": ordered_stages,
-            "events": events,
-            "stage_order": STAGE_ORDER,
-        })
-
-    # ------------------------------------------------------------------
-    # HTMX partials
-    # ------------------------------------------------------------------
-
-    @app.get("/partials/run-list", response_class=HTMLResponse)
-    async def partial_run_list(request: Request):
-        manager = get_run_manager()
-        runs = manager.list_runs()
-        return templates.TemplateResponse(request, "partials/run_list.html", {
-            "runs": runs,
-        })
-
-    @app.get("/partials/runs/{run_id}/stages", response_class=HTMLResponse)
-    async def partial_stages(request: Request, run_id: str):
-        manager = get_run_manager()
-        run = manager.get_run(run_id)
-        if not run:
-            raise HTTPException(status_code=404, detail="Run not found")
-        stages = manager.get_stages(run_id)
-        stage_map = {s.stage_name: s for s in stages}
-        ordered_stages = [stage_map.get(name) for name in STAGE_ORDER]
-        return templates.TemplateResponse(request, "partials/stage_dashboard.html", {
-            "run": run,
-            "stages": ordered_stages,
-            "stage_order": STAGE_ORDER,
-        })
+def register_routes(app: FastAPI) -> None:
+    """Register the JSON + SSE routes consumed by the React dashboard."""
 
     # ------------------------------------------------------------------
     # REST API
@@ -485,15 +371,6 @@ def register_routes(app: FastAPI, templates: Jinja2Templates) -> None:
     # Settings
     # ------------------------------------------------------------------
 
-    @app.get("/settings", response_class=HTMLResponse)
-    async def settings_page(request: Request):
-        from mle_beast.llm import PROVIDER
-        settings = get_settings()
-        return templates.TemplateResponse(request, "settings.html", {
-            "settings": settings,
-            "detected_provider": PROVIDER,
-        })
-
     @app.get("/api/settings")
     async def api_get_settings():
         return get_settings().to_dict()
@@ -533,13 +410,10 @@ def register_routes(app: FastAPI, templates: Jinja2Templates) -> None:
     # Admin
     # ------------------------------------------------------------------
 
-    @app.get("/admin", response_class=HTMLResponse)
-    async def admin_page(request: Request):
+    @app.get("/api/admin/stats")
+    async def api_admin_stats():
         from mle_beast.db import get_database
-        stats = get_database().get_stats()
-        return templates.TemplateResponse(request, "admin.html", {
-            "stats": stats,
-        })
+        return get_database().get_stats()
 
     @app.post("/api/admin/delete-old-runs")
     async def api_delete_old_runs(request: Request):
