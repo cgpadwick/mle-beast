@@ -18,16 +18,59 @@ from __future__ import annotations
 import os
 import time
 
+import httpx
 import instructor
 from openai import OpenAI
 
 LLM_CALL_RETRIES = 3
 
 
+# Explicit per-phase HTTP timeouts so a stuck socket can't hang a run.
+# The OpenAI Python SDK accepts a number for `timeout=`, but observation
+# (and a 14-minute hang on a 300s "timeout") shows the number-form doesn't
+# always reach the underlying socket read — httpx.Timeout with the `read`
+# phase set explicitly is the reliable hammer.
+#
+# - connect: TCP handshake (a few hundred ms in practice; 10s is generous)
+# - read:    inter-byte wait from the server. THIS is the one that catches
+#            "request accepted, response never arrived" hangs.
+# - write:   uploading the prompt. Even 100KB system prompts upload in <1s
+#            on a normal link.
+# - pool:    waiting for a free connection from the pool. Effectively
+#            instant unless we ran out of connections, which we never do.
+_HTTP_TIMEOUT = httpx.Timeout(connect=10.0, read=180.0, write=60.0, pool=10.0)
+
+
+def _make_openai_client(*, base_url: str | None = None, api_key: str) -> OpenAI:
+    """Build an OpenAI client with our shared timeout + retry policy.
+
+    We set max_retries=2 (not the SDK default of 2 either — being explicit)
+    so a single hung request times out at 180s and we re-issue automatically
+    instead of dead-ending the run.
+    """
+    kwargs: dict = {
+        "api_key": api_key,
+        "timeout": _HTTP_TIMEOUT,
+        "max_retries": 2,
+    }
+    if base_url is not None:
+        kwargs["base_url"] = base_url
+    return OpenAI(**kwargs)
+
+
 def _auto_detect_local_model(base_url: str) -> str:
-    """Query the local server's /v1/models endpoint to find the served model."""
+    """Query the local server's /v1/models endpoint to find the served model.
+
+    Uses a short timeout so a misconfigured base_url doesn't hang the
+    import chain — get_settings() calls this when no MLE_BEAST_MODEL is
+    set, and that's loaded eagerly on first DB access.
+    """
     try:
-        client = OpenAI(base_url=base_url, api_key="not-needed")
+        client = OpenAI(
+            base_url=base_url,
+            api_key="not-needed",
+            timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0),
+        )
         models = client.models.list()
         if models.data:
             return models.data[0].id
@@ -94,22 +137,25 @@ def get_client(settings=None) -> instructor.Instructor:
         )
     if provider == "local":
         base_url = os.environ.get("LOCAL_LLM_BASE_URL", "http://localhost:8000/v1")
-        oai = OpenAI(
+        oai = _make_openai_client(
             base_url=base_url,
             api_key=os.environ.get("LOCAL_LLM_API_KEY", "not-needed"),
         )
         return instructor.from_openai(oai, mode=instructor.Mode.JSON)
     elif provider == "openrouter":
-        oai = OpenAI(
+        oai = _make_openai_client(
             base_url="https://openrouter.ai/api/v1",
             api_key=os.environ.get("OPENROUTER_API_KEY", ""),
-            timeout=300.0,
-            max_retries=0,
         )
         return instructor.from_openai(oai, mode=instructor.Mode.JSON)
     else:
-        model = get_model_name(settings)
-        return instructor.from_provider("openai/" + model, mode=instructor.Mode.JSON)
+        # OpenAI direct. We build the OpenAI client ourselves (instead of
+        # instructor.from_provider) so we can attach the shared timeout
+        # policy — from_provider doesn't expose a timeout-config hook.
+        oai = _make_openai_client(
+            api_key=os.environ.get("OPENAI_API_KEY", ""),
+        )
+        return instructor.from_openai(oai, mode=instructor.Mode.JSON)
 
 
 def max_tokens_kwarg(max_tokens: int = 4096, settings=None) -> dict:
