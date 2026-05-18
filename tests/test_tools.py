@@ -3,9 +3,14 @@
 
 """Unit tests for tool implementations."""
 
-import pytest
-from pathlib import Path
 
+import pytest
+
+from mle_beast.models.tool_calls import (
+    MarkCompleteArgs,
+    ReadFileArgs,
+    WriteFileArgs,
+)
 from mle_beast.tools.file_ops import (
     create_directory,
     download_url,
@@ -286,8 +291,8 @@ class TestLaunchTrainingBaseline:
 
     def test_launch_training_passes_baseline_from_shared(self, workspace):
         """Test that _tool_launch_training extracts baseline from shared."""
-        from mle_beast.tools.registry import _tool_launch_training
         from mle_beast.models.tool_calls import LaunchTrainingArgs
+        from mle_beast.tools.registry import _tool_launch_training
 
         # Create a simple script that prints an epoch with low score
         script_content = '''
@@ -312,8 +317,8 @@ sys.exit(0)
 
     def test_launch_training_no_baseline_runs_normally(self, workspace):
         """Test that training runs normally without baseline."""
-        from mle_beast.tools.registry import _tool_launch_training
         from mle_beast.models.tool_calls import LaunchTrainingArgs
+        from mle_beast.tools.registry import _tool_launch_training
 
         script_content = '''
 print("Epoch 1: val_score=0.01")
@@ -335,8 +340,8 @@ print("Training complete")
 
     def test_launch_training_ignores_inf_baseline(self, workspace):
         """Test that inf baseline is ignored."""
-        from mle_beast.tools.registry import _tool_launch_training
         from mle_beast.models.tool_calls import LaunchTrainingArgs
+        from mle_beast.tools.registry import _tool_launch_training
 
         script_content = '''
 print("Epoch 1: val_score=0.01")

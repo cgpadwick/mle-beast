@@ -12,12 +12,10 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
-import uuid
 from enum import Enum
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 
 from pydantic import BaseModel, Field
-
 
 # ---------------------------------------------------------------------------
 # Event models

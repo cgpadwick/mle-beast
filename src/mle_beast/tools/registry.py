@@ -11,14 +11,6 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict
 
-from mle_beast.tools.file_ops import (
-    create_directory,
-    download_url,
-    edit_file,
-    list_files,
-    read_file,
-    write_file,
-)
 from mle_beast.tools.execution import (
     launch_evaluate,
     launch_training,
@@ -26,6 +18,14 @@ from mle_beast.tools.execution import (
     run_shell_command,
     run_single_test,
     run_tests,
+)
+from mle_beast.tools.file_ops import (
+    create_directory,
+    download_url,
+    edit_file,
+    list_files,
+    read_file,
+    write_file,
 )
 from mle_beast.tools.metadata import (
     check_cuda,

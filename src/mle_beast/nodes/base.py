@@ -16,9 +16,7 @@ BaseCriticNode:
 
 from __future__ import annotations
 
-import json
 import time
-from pathlib import Path
 from typing import Any, Optional
 
 from pocketflow import Node
@@ -31,10 +29,14 @@ from mle_beast.events import (
     StageStarted,
     ToolExecuted,
 )
-from mle_beast.llm import MODEL, call_llm, emit_llm_call_event, get_client, get_model_name, max_tokens_kwarg
+from mle_beast.llm import (
+    emit_llm_call_event,
+    get_client,
+    get_model_name,
+    max_tokens_kwarg,
+)
 from mle_beast.settings import Settings
 from mle_beast.tools.registry import execute_tool
-
 
 MAX_TOOL_ITERATIONS = 30
 MAX_CRITIC_RETRIES = 3

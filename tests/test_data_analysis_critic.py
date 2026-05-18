@@ -17,7 +17,6 @@ from mle_beast.nodes.data_analysis import (
     _check_artifact,
 )
 
-
 COMPLETE_ARTIFACT = """\
 # Data Analysis — Test
 

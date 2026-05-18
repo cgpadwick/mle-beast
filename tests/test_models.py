@@ -16,7 +16,6 @@ from mle_beast.models.verdicts import (
     TestVerdict,
 )
 
-
 # ---- tool_calls ----
 
 class TestCodingToolCall:

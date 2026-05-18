@@ -11,9 +11,7 @@ This is a CRITIC node: no tool loop.
 
 from __future__ import annotations
 
-from pathlib import Path
-
-from mle_beast.events import LogMessage, RetryOccurred, StageCompleted
+from mle_beast.events import RetryOccurred, StageCompleted
 from mle_beast.llm import call_llm
 from mle_beast.models.verdicts import AnalysisVerdict
 from mle_beast.nodes.base import BaseCriticNode, _emit, _get_run_id

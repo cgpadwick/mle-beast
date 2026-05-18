@@ -8,9 +8,16 @@ Thanks for your interest! Contributions of all sizes are welcome — bug reports
 git clone https://github.com/cgpadwick/mle-beast.git
 cd mle-beast
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[web]"
-pytest tests/ -k "not integration"   # unit tests, no API key required
+pip install -e ".[web,dev]"
+
+# Lint
+ruff check .
+
+# Unit tests + coverage (no API key required)
+pytest tests/ -k "not integration" --cov=src/mle_beast --cov-report=term-missing
 ```
+
+CI runs all three (lint, tests, coverage) on every PR. Coverage must stay ≥ 50% — bump up the floor over time as tests are added.
 
 ## Developer Certificate of Origin (DCO)
 
@@ -22,7 +29,7 @@ To comply: **add `-s` to every `git commit`.**
 git commit -s -m "Add feature X"
 ```
 
-That appends a `Signed-off-by:` line to your commit message using your `git config user.name` and `user.email`. The DCO check on PRs verifies every commit has this line.
+That appends a `Signed-off-by:` line to your commit message using your `git config user.name` and `user.email`.
 
 If you forget, you can amend or rebase:
 ```bash
@@ -43,7 +50,7 @@ git rebase HEAD~3 --signoff                  # last 3 commits
 
 - Python 3.10+. Type hints encouraged but not enforced.
 - Prefer clarity over cleverness. Critics-don't-use-tools, structured-output-is-non-negotiable, and similar invariants are documented in the codebase — preserve them.
-- Run `ruff check src/ tests/` if you've installed dev deps (CI doesn't fail on style yet but we'd like it to).
+- Lint with `ruff check .` before opening a PR. Auto-fix what you can with `ruff check --fix .`.
 
 ## Reporting bugs
 

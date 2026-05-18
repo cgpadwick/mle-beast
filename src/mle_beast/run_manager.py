@@ -15,9 +15,9 @@ import threading
 import time
 import traceback
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, TextIO
+from typing import Optional, TextIO
 
 from mle_beast.db import get_database
 from mle_beast.events import (
@@ -30,7 +30,6 @@ from mle_beast.events import (
     StageStarted,
     get_event_bus,
 )
-
 
 # Stage rows pre-created at run insert time so the dashboard sees a stable
 # skeleton even before any StageStarted events fire. This must match the
@@ -350,6 +349,7 @@ class RunManager:
     def _run_pipeline(self, run_id: str, cancel_event: threading.Event) -> None:
         """Execute the pipeline (runs in background thread)."""
         import sys
+
         from mle_beast.flows.full_pipeline import build_full_pipeline
         from mle_beast.settings import get_settings
         from mle_beast.workspace import WorkspaceCreator, WorkspaceRegistry, check_workspace_env

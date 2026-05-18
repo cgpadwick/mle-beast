@@ -21,7 +21,6 @@ import time
 import instructor
 from openai import OpenAI
 
-
 LLM_CALL_RETRIES = 3
 
 
@@ -191,7 +190,7 @@ def emit_llm_call_event(
     Wrapped in try/except — observability must never break a real call.
     """
     try:
-        from mle_beast.events import get_current_run_id, get_event_bus, LLMCall
+        from mle_beast.events import LLMCall, get_current_run_id, get_event_bus
     except Exception:
         return
     rid = get_current_run_id()
