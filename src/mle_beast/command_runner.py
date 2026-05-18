@@ -161,7 +161,7 @@ def run_command(
                 pass
 
         if result.returncode == 0:
-            _log(f"Command succeeded (exit code: 0)", LogLevel.DEBUG)
+            _log("Command succeeded (exit code: 0)", LogLevel.DEBUG)
         else:
             _log(f"Command failed (exit code: {result.returncode})", LogLevel.ERROR)
             # stderr was already dumped above when capture_output is set, so

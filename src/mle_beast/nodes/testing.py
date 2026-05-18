@@ -12,7 +12,6 @@ This is a CRITIC node: it doesn't use the tool loop pattern.
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 from mle_beast.llm import call_llm
 from mle_beast.models.verdicts import TestVerdict
@@ -152,7 +151,7 @@ def _get_llm_feedback(test_output: str, max_chars: int = 3000) -> str:
             ],
         )
         return result.feedback
-    except Exception as e:
+    except Exception:
         # Fallback: return raw tail of output
         tail = "\n".join(test_output.splitlines()[-20:])
         return f"Tests failed. Output tail:\n{tail}"

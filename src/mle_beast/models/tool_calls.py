@@ -13,7 +13,6 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, Field, model_validator
 
-
 # ============================================================================
 # Tool argument models — shared across roles
 # ============================================================================

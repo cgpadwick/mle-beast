@@ -19,13 +19,11 @@ from __future__ import annotations
 
 import re
 import subprocess
-import time
 from pathlib import Path
 from typing import Optional
 
 from pocketflow import Node
 from pydantic import BaseModel, Field
-
 
 # ---------------------------------------------------------------------------
 # Validation score extraction
@@ -719,7 +717,6 @@ class HillClimbEvalNode(Node):
         hypothesis = proposal[:120].replace("\n", " ") if proposal else f"step {step}"
 
         if improved:
-            delta = best - score
             # Commit the improvement
             _git(workspace, "add", "-A")
             _git(workspace, "commit", "-m",
@@ -1059,7 +1056,7 @@ def print_pipeline_summary(shared: dict) -> None:
         print(f"To merge experiment commits into '{original}':")
         print(f"  cd {workspace} && git switch {original} && git merge {branch}")
         print()
-        print(f"To inspect what changed:")
+        print("To inspect what changed:")
         print(f"  cd {workspace} && git log {original}..{branch} --oneline")
         if stashed:
             print()

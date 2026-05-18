@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import pytest
 
-from mle_beast.db import Database
 from mle_beast.run_manager import RunManager
 
 

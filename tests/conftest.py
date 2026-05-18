@@ -3,9 +3,6 @@
 
 """Shared fixtures for mle_beast tests."""
 
-import os
-import tempfile
-from pathlib import Path
 
 import pytest
 

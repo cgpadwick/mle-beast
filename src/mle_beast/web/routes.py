@@ -19,7 +19,6 @@ from mle_beast.events import PipelineEvent, get_event_bus
 from mle_beast.run_manager import RunConfig, RunInfo, StageInfo, get_run_manager
 from mle_beast.settings import Settings, get_settings, reload_settings, save_settings
 
-
 # ---------------------------------------------------------------------------
 # Request/response models
 # ---------------------------------------------------------------------------
@@ -322,7 +321,7 @@ def register_routes(app: FastAPI) -> None:
                 size = path.stat().st_size
                 if offset > size:
                     offset = 0
-                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                with open(path, encoding="utf-8", errors="replace") as f:
                     f.seek(offset)
                     text = f.read()
                 return JSONResponse({
@@ -350,7 +349,7 @@ def register_routes(app: FastAPI) -> None:
         if offset > size:
             # File got truncated/rotated since the last poll — just resend it all.
             offset = 0
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             f.seek(offset)
             text = f.read()
         return JSONResponse({"text": text, "size": size, "exists": True})
@@ -367,6 +366,7 @@ def register_routes(app: FastAPI) -> None:
     async def api_local_model_name():
         """Auto-discover the model name from a local LLM server."""
         import os
+
         from mle_beast.llm import _auto_detect_local_model
         base_url = os.environ.get("LOCAL_LLM_BASE_URL", "http://localhost:8000/v1")
         model = _auto_detect_local_model(base_url)
@@ -447,7 +447,6 @@ def register_routes(app: FastAPI) -> None:
                         )
                         # Determine SSE event type
                         from mle_beast.events import (
-                            EventType,
                             ExperimentRecorded,
                             LLMCall,
                             RunStateChanged,
