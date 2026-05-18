@@ -3,6 +3,7 @@
 
 """Unit tests for tool implementations."""
 
+from pathlib import Path
 
 import pytest
 
@@ -21,11 +22,6 @@ from mle_beast.tools.file_ops import (
 )
 from mle_beast.tools.registry import execute_tool
 from mle_beast.workspace import WorkspaceRegistry
-from mle_beast.models.tool_calls import (
-    WriteFileArgs,
-    ReadFileArgs,
-    MarkCompleteArgs,
-)
 
 
 class TestWriteFile:

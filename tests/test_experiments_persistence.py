@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-
 import pytest
 
 from mle_beast.db import Database

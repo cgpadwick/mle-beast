@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
 from mle_beast.models.tool_calls import (
     CreateDirectoryArgs,
     EditFileArgs,
@@ -27,7 +26,6 @@ from mle_beast.tools.registry import (
     _apply_timeout_override,
     execute_tool,
 )
-
 
 # ---------------------------------------------------------------------------
 # Tiny stand-ins so registry tests don't have to touch real subprocesses
