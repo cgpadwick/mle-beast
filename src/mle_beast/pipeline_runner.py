@@ -70,7 +70,10 @@ def execute_pipeline(
 
     try:
         _ensure_workspace(run_row, bus, db, run_id)
-        shared = _build_shared_dict(run_id, run_row, bus, cancel_event, settings)
+        workspace = _setup_run_context(run_row)
+        shared = _build_shared_dict(
+            run_id, run_row, workspace, bus, cancel_event, settings,
+        )
 
         from mle_beast.flows.full_pipeline import build_full_pipeline
         flow = build_full_pipeline()
@@ -126,23 +129,47 @@ def _ensure_workspace(run_row: dict, bus: EventBus, db: Database, run_id: str) -
         db.upsert_stage(run_id, "setup", status="pass")
 
 
+def _setup_run_context(run_row: dict):
+    """Register process-wide state for this run: workspace + read-allowlist.
+
+    Returns the resolved workspace path (a pathlib.Path from
+    WorkspaceRegistry.set_workspace). Caller passes this to
+    _build_shared_dict so the dict construction can stay side-effect-free.
+
+    The metric_name-gated add_allowed_read_path is preserved from the
+    original — it's almost certainly an unrelated bug (the dataset path
+    needs to be readable regardless of whether a metric_name is set),
+    but fixing that is out of scope for this structural PR.
+    """
+    from mle_beast.workspace import WorkspaceRegistry
+
+    ws = WorkspaceRegistry.set_workspace(run_row["workspace"])
+    if run_row.get("metric_name"):
+        WorkspaceRegistry.add_allowed_read_path(run_row["dataset_path"])
+    return ws
+
+
 def _build_shared_dict(
     run_id: str,
     run_row: dict,
+    workspace,
     bus: EventBus,
     cancel_event: threading.Event,
     settings: Settings,
 ) -> dict:
-    """Build the PocketFlow shared dict that flows through every node."""
-    from mle_beast.cuda_detection import select_device
-    from mle_beast.workspace import WorkspaceRegistry
+    """Build the PocketFlow shared dict that flows through every node.
 
-    ws = WorkspaceRegistry.set_workspace(run_row["workspace"])
+    Pure construction — registry mutations live in _setup_run_context;
+    device detection runs nvidia-smi but its result goes into the dict
+    we return, so it belongs here.
+    """
+    from mle_beast.cuda_detection import select_device
+
     device = select_device(force_cpu=bool(run_row["force_cpu"]))
 
     shared: dict = {
         "task": run_row["task"],
-        "workspace": str(ws),
+        "workspace": str(workspace),
         "device": device,
         "event_bus": bus,
         "run_id": run_id,
@@ -174,7 +201,6 @@ def _build_shared_dict(
     # different metric.
     if run_row.get("metric_name"):
         shared["metric_name"] = run_row["metric_name"]
-        WorkspaceRegistry.add_allowed_read_path(run_row["dataset_path"])
     return shared
 
 
