@@ -53,6 +53,14 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+# Ship the built React SPA inside the wheel. `npm run build` populates
+# this directory before `pip install` / `pip wheel`; if you're building
+# from a source checkout that hasn't run npm build, the dashboard mount
+# is skipped at runtime and the user can either rebuild or run with
+# --no-web.
+"mle_beast.web" = ["static/**/*"]
+
 [tool.pytest.ini_options]
 markers = [
     "integration: full end-to-end integration tests (require API key)",
