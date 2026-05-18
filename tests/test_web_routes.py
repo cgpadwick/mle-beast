@@ -17,7 +17,6 @@ from fastapi.testclient import TestClient
 from mle_beast.run_manager import RunInfo, StageInfo
 from mle_beast.web.app import create_app
 
-
 # ---------------------------------------------------------------------------
 # Test doubles
 # ---------------------------------------------------------------------------
