@@ -102,12 +102,21 @@ def main() -> None:
     if not args.no_browser:
         _open_browser_when_ready(url)
 
-    start_web(
-        host=args.host,
-        port=args.port,
-        ssl_certfile=args.ssl_cert,
-        ssl_keyfile=args.ssl_key,
-    )
+    try:
+        start_web(
+            host=args.host,
+            port=args.port,
+            ssl_certfile=args.ssl_cert,
+            ssl_keyfile=args.ssl_key,
+        )
+    except (ModuleNotFoundError, ImportError):
+        print(
+            "Error: web dependencies not installed.\n"
+            "Install with: pip install 'mle-beast[web]'\n"
+            "Or run without the dashboard: mle-beast --no-web",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 if __name__ == "__main__":
