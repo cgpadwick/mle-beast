@@ -39,7 +39,7 @@ export default function App() {
             back button so we just leave this gear visible. */}
         <button
           onClick={() => setView(view === "settings" ? "list" : "settings")}
-          title="Settings"
+          title="Settings &amp; Admin"
           style={{
             position: "absolute", top: 12, right: 16, zIndex: 10,
             width: 36, height: 36, borderRadius: 10,

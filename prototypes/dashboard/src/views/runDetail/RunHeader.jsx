@@ -7,8 +7,12 @@ import { StatusPill } from "../../primitives.jsx";
 
 function RunHeader({ run, runId, stageMap, activeStageKey, peak, onBack, onCancel }) {
   return (
+    // Right padding bumped from 24 → 76 to reserve room for the
+    // fixed-position gear button in App.jsx (36px wide at right:16).
+    // Without this offset the gear visually overlaps Cancel Run /
+    // PEAK in the right cluster.
     <div style={{
-      padding: "9px 24px", borderBottom: "1px solid var(--border)",
+      padding: "9px 76px 9px 24px", borderBottom: "1px solid var(--border)",
       display: "flex", alignItems: "center", justifyContent: "space-between",
       flexShrink: 0,
     }}>

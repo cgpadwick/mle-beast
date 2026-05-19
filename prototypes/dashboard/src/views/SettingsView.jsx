@@ -63,13 +63,24 @@ const LOG_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR"];
 
 function SettingsView({ onClose }) {
   const [tab, setTab] = useState("settings");
+  // `settings` is the original-typed snapshot (numbers stay numbers).
+  // `numericTypes` records which keys were originally numeric so we
+  // know what to coerce on save.
   const [settings, setSettings] = useState(null);
+  const [numericTypes, setNumericTypes] = useState({});
   const [provider, setProvider] = useState("");
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState(null);
 
   useEffect(() => {
-    fetch("/api/settings").then(r => r.json()).then(setSettings).catch(() => {});
+    fetch("/api/settings").then(r => r.json()).then(s => {
+      setSettings(s);
+      // Snapshot which keys are numeric so update() doesn't lose that
+      // info when the user temporarily blanks a numeric input.
+      const nums = {};
+      for (const [k, v] of Object.entries(s)) nums[k] = typeof v === "number";
+      setNumericTypes(nums);
+    }).catch(() => {});
     fetch("/api/local-model-name").then(r => r.json()).then(b => setProvider(b.model || "")).catch(() => {});
   }, []);
 
@@ -82,9 +93,11 @@ function SettingsView({ onClose }) {
   }
 
   const update = (key) => (e) => {
-    const v = e.target.value;
-    const isNum = typeof settings[key] === "number";
-    setSettings({ ...settings, [key]: isNum ? (v === "" ? 0 : Number(v)) : v });
+    // Store the raw string regardless of original type. We only coerce
+    // to Number at save time — that way the user can temporarily clear
+    // a numeric field (to retype it) without it silently becoming 0.
+    // The save handler validates that all numeric fields are parseable.
+    setSettings({ ...settings, [key]: e.target.value });
     setSavedMsg(null);
   };
 
@@ -92,10 +105,34 @@ function SettingsView({ onClose }) {
     setSaving(true);
     setSavedMsg(null);
     try {
+      // Coerce numeric fields back to numbers; reject anything that
+      // doesn't parse (e.g., the user blanked a required int and
+      // hit Save).
+      const payload = {};
+      const bad = [];
+      for (const [k, v] of Object.entries(settings)) {
+        if (numericTypes[k]) {
+          const n = Number(v);
+          if (v === "" || v === null || Number.isNaN(n)) {
+            bad.push(k);
+          } else {
+            payload[k] = n;
+          }
+        } else {
+          payload[k] = v ?? "";
+        }
+      }
+      if (bad.length) {
+        setSavedMsg({
+          ok: false,
+          msg: `These fields need a number: ${bad.join(", ")}`,
+        });
+        return;
+      }
       const res = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
+        body: JSON.stringify(payload),
       });
       if (res.ok) setSavedMsg({ ok: true, msg: "Settings saved." });
       else setSavedMsg({ ok: false, msg: `Save failed: ${res.status}` });
@@ -161,6 +198,7 @@ function SettingsView({ onClose }) {
       {tab === "settings" && (
         <SettingsTab
           settings={settings}
+          numericTypes={numericTypes}
           provider={provider}
           update={update}
           save={save}
@@ -177,7 +215,7 @@ function SettingsView({ onClose }) {
 }
 
 
-function SettingsTab({ settings, provider, update, save, saving, savedMsg, inputStyle, labelStyle }) {
+function SettingsTab({ settings, numericTypes, provider, update, save, saving, savedMsg, inputStyle, labelStyle }) {
   return (
     <>
       {provider && (
@@ -199,17 +237,25 @@ function SettingsTab({ settings, provider, update, save, saving, savedMsg, input
             {group.fields.map(([key, hint]) => {
               if (!(key in settings)) return null;  // server schema drift
               const val = settings[key];
+              // Use the original-type snapshot, not typeof(val) — val
+              // becomes a string as soon as the user edits a numeric
+              // field, but we still want the number-input behavior
+              // (spinner, mobile numeric keyboard).
+              const isNumeric = numericTypes[key];
+              // Show empty string as-is for cleared inputs; React
+              // complains about null/undefined value props.
+              const display = val === null || val === undefined ? "" : val;
               return (
                 <div key={key}>
                   <label style={labelStyle}>{key}</label>
                   {key === "log_level" ? (
-                    <select style={inputStyle} value={val} onChange={update(key)}>
+                    <select style={inputStyle} value={display} onChange={update(key)}>
                       {LOG_LEVELS.map(lvl => <option key={lvl} value={lvl}>{lvl}</option>)}
                     </select>
-                  ) : typeof val === "number" ? (
-                    <input style={inputStyle} type="number" value={val} onChange={update(key)} />
+                  ) : isNumeric ? (
+                    <input style={inputStyle} type="number" value={display} onChange={update(key)} />
                   ) : (
-                    <input style={inputStyle} type="text" value={val} onChange={update(key)} />
+                    <input style={inputStyle} type="text" value={display} onChange={update(key)} />
                   )}
                   <div style={{ fontSize: 9, color: "var(--text-faint)", marginTop: 4 }}>{hint}</div>
                 </div>
