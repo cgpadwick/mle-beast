@@ -331,16 +331,24 @@ class WorkspaceCreator:
             capture_output=False,
         )
 
-        # ml-frameworks base now ships scikit-learn, matplotlib, seaborn,
-        # joblib, requests, rich. So `-E data` (just dask/polars/pyarrow now)
-        # and the old kitchen-sink `-E viz` are no longer needed for sklearn
-        # or matplotlib/seaborn. Keep `-E viz` (plotly) for richer EDA;
-        # drop `-E data` and `-E viz-app` (bokeh/streamlit/dash/gradio/
-        # jupyter/ipython) which the actor doesn't use.
+        # Base-only install. ml-frameworks's base ships everything most
+        # tasks need: torch + torchvision + torchaudio + numpy + scipy
+        # + pandas + scikit-learn + joblib + matplotlib + seaborn +
+        # pytest. Total ~5.5 GB. If the agent's code needs anything else
+        # (e.g. transformers for NLP, ultralytics for YOLO) it adds the
+        # appropriate group at run time via `poetry install --no-root
+        # -E <group>` against the pyproject.toml we leave at workspace
+        # root. The available groups are defined under
+        # [tool.poetry.extras] there and the actor system prompts are
+        # nudged to prefer that over `pip install <pkg>` (poetry uses
+        # the lock file ml-frameworks has already validated). Old
+        # kitchen-sink install (-E ml -E vision -E nlp -E vision-extra
+        # -E viz, ~8 GB) was removed when ml-frameworks reorganized:
+        # the `ml` group no longer exists and lots of what was in it
+        # is in base now anyway.
         self._run(
-            ["poetry", "install", "--no-root", "-E", "ml", "-E", "vision",
-             "-E", "nlp", "-E", "vision-extra", "-E", "viz"],
-            description=f"Installing stack into venv at {self.root}",
+            ["poetry", "install", "--no-root"],
+            description=f"Installing ml-frameworks BASE into venv at {self.root}",
             cwd=str(self.root),
             env=poetry_env,
             capture_output=False,

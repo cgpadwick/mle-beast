@@ -60,4 +60,20 @@ COMPUTE BUDGET:
 - Prefer simple, deterministic training scripts: one model fit, one
   evaluation. The pipeline reverts slow or failed iterations, so a
   fast wrong answer is better than a slow correct one.
+
+INSTALLING ADDITIONAL PACKAGES:
+The workspace's venv has the ml-frameworks BASE stack: torch + torchvision
++ torchaudio + numpy + scipy + pandas + scikit-learn + matplotlib + seaborn
++ pytest. If your proposed change needs a package NOT in base (e.g.
+transformers, ultralytics, pytorch-lightning), prefer:
+    cd <workspace_root> && poetry install --no-root -E <group>
+over a raw `pip install <pkg>`. The available groups are defined in
+pyproject.toml at the workspace root under [tool.poetry.extras] —
+common ones: nlp (transformers, datasets, peft, accelerate), training
+(pytorch-lightning, torchmetrics, tensorboard, optuna), vision
+(opencv-contrib-python, scikit-image, albumentations), vision-extra
+(ultralytics, timm), viz (plotly), data (dask, polars, pyarrow), gnn
+(torch-geometric). Poetry uses the pinned lock file ml-frameworks has
+already validated, so groups install cleanly and don't conflict. Fall
+back to `pip install` ONLY for packages not covered by any group.
 """
