@@ -25,10 +25,9 @@ function RunsListView({ onOpen, onNew }) {
 
   return (
     <div style={{ flex: 1, overflow: "auto" }}>
-      {/* Hero banner — wordmark left, Singularity Software logo right.
-          Doubled height (144) from the previous 72 so the brand assets
-          have room to breathe. New Run button moved out of the banner
-          and sits at the top of the runs content area below. */}
+      {/* Hero banner — wordmark + tagline + run summary. The
+          right-hand SS branding image was removed when this project
+          went open-source; the banner is now left-aligned only. */}
       <div style={{
         position: "relative",
         height: 144,
@@ -38,7 +37,7 @@ function RunsListView({ onOpen, onNew }) {
       }}>
         <div style={{
           position: "relative", zIndex: 1,
-          display: "flex", alignItems: "center", justifyContent: "space-between",
+          display: "flex", alignItems: "center",
           gap: 20, padding: "0 28px", height: "100%",
         }}>
           {/* Left: text cluster (cube + mle-beast wordmark + tagline) */}
@@ -90,19 +89,6 @@ function RunsListView({ onOpen, onNew }) {
             </div>
           </div>
 
-          {/* Right: Singularity Software logo */}
-          <img
-            src="/ss_logo.png"
-            alt="Singularity Software"
-            style={{
-              height: "100%",
-              width: "auto",
-              maxHeight: 144,
-              objectFit: "contain",
-              flexShrink: 0,
-              display: "block",
-            }}
-          />
         </div>
       </div>
 

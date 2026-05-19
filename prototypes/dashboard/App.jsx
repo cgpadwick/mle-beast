@@ -1,9 +1,10 @@
 import { useState } from "react";
 
 import { Sidebar } from "./src/Sidebar.jsx";
-import { RunsListView } from "./src/views/RunsListView.jsx";
 import { NewRunView } from "./src/views/NewRunView.jsx";
 import { RunDetailView } from "./src/views/RunDetailView.jsx";
+import { RunsListView } from "./src/views/RunsListView.jsx";
+import { SettingsView } from "./src/views/SettingsView.jsx";
 
 
 export default function App() {
@@ -30,10 +31,35 @@ export default function App() {
 
       <Sidebar view={view} setView={setView} theme={theme} onToggleTheme={toggleTheme} />
 
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
+        {/* Fixed-position gear button — always reachable from any view.
+            Stays out of the layout flow so the underlying view doesn't
+            need to know about it. Clicking sets view=settings; when
+            already in settings, the SettingsView renders its own
+            back button so we just leave this gear visible. */}
+        <button
+          onClick={() => setView(view === "settings" ? "list" : "settings")}
+          title="Settings"
+          style={{
+            position: "absolute", top: 12, right: 16, zIndex: 10,
+            width: 36, height: 36, borderRadius: 10,
+            border: "1px solid var(--border)", cursor: "pointer",
+            background: view === "settings" ? "rgba(99,102,241,0.15)" : "var(--surface)",
+            color: view === "settings" ? "#a5b4fc" : "var(--text-muted)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            transition: "all 0.15s",
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <circle cx="9" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M9 2V4M9 14V16M2 9H4M14 9H16M4.22 4.22L5.64 5.64M12.36 12.36L13.78 13.78M13.78 4.22L12.36 5.64M5.64 12.36L4.22 13.78" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          </svg>
+        </button>
+
         {view === "list" && <RunsListView onOpen={open} onNew={() => setView("new")} />}
         {view === "new" && <NewRunView onCreated={open} onCancel={() => setView("list")} />}
         {view === "detail" && currentRunId && <RunDetailView runId={currentRunId} onBack={() => setView("list")} />}
+        {view === "settings" && <SettingsView onClose={() => setView("list")} />}
       </div>
 
       <style>{`
