@@ -204,7 +204,14 @@ function NewRunView({ onCreated, onCancel }) {
             value={form.environment}
             onChange={(e) => {
               setEnvProbe(null);
-              setForm({ ...form, environment: e.target.value });
+              const next = { ...form, environment: e.target.value };
+              // When the user starts setting an env path, also clear
+              // `setup_workspace` so the submitted payload doesn't
+              // claim both at once. environment takes precedence at
+              // run time, but the UI / persisted run row would
+              // otherwise misrepresent the choice.
+              if (e.target.value.trim()) next.setup_workspace = false;
+              setForm(next);
             }}
             onBlur={async () => {
               const path = form.environment.trim();

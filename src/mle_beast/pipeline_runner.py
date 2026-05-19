@@ -108,9 +108,11 @@ def _ensure_workspace(run_row: dict, bus: EventBus, db: Database, run_id: str) -
        (~minutes to hours) but produces a known-good environment.
 
     3. Default — assume the user manages their own venv at
-       `<workspace>/.venv` or `<workspace>/venv`. Probe it via
-       check_workspace_env before the pipeline starts so we fail fast
-       on missing prereqs.
+       `<workspace>/.venv`. Probe it via check_workspace_env before
+       the pipeline starts so we fail fast on missing prereqs. (If
+       the user's venv is at `<workspace>/venv` or anywhere else,
+       they should set `environment` to point at it explicitly —
+       case 1 — rather than relying on the default location.)
 
     Always creates the bare workspace directory — saves the user from
     a FileNotFoundError mid-run when they typed a path that doesn't

@@ -10,7 +10,6 @@ mid-pipeline crash because their venv doesn't have pytest, etc.
 from __future__ import annotations
 
 import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -217,6 +216,8 @@ class TestGetWorkspaceEnvHonorsRegistry:
             assert env["VIRTUAL_ENV"] == str(outside)
             assert str(outside / "bin") in env["PATH"]
         finally:
-            # Symlink leaks across tests if we don't clean up — tmp_path
-            # only handles its own subtree.
-            subprocess.run(["rm", "-rf", str(outside)], check=False)
+            # `outside` lives a level above tmp_path so pytest's tmp_path
+            # auto-cleanup wouldn't catch it. shutil.rmtree handles
+            # symlinks correctly (doesn't follow into the real /usr/bin).
+            import shutil
+            shutil.rmtree(outside, ignore_errors=True)

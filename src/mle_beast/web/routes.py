@@ -179,11 +179,26 @@ def register_routes(app: FastAPI) -> None:
         400 {ok:false, error:"..."} with a human-readable explanation.
 
         Lets the new-run form give immediate feedback on the env field
-        before the user clicks Submit.
+        before the user clicks Submit. A malformed body is treated as
+        a bad request (400) so the form's blur-probe gets a structured
+        response instead of bubbling up a 500.
         """
+        import json as _json
+
         from mle_beast.workspace import validate_environment_path
 
-        body = await request.json()
+        try:
+            body = await request.json()
+        except (ValueError, _json.JSONDecodeError):
+            return JSONResponse(
+                {"ok": False, "error": "request body must be JSON"},
+                status_code=400,
+            )
+        if not isinstance(body, dict):
+            return JSONResponse(
+                {"ok": False, "error": "request body must be a JSON object"},
+                status_code=400,
+            )
         path = (body.get("path") or "").strip()
         if not path:
             return JSONResponse(

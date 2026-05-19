@@ -119,6 +119,14 @@ def validate_environment_path(env_path: _PathLike) -> Path:
             f"bin/python. Activate the env once and try `which python` to "
             f"find the right path."
         )
+    # is_file() follows symlinks, so a venv's symlinked python passes.
+    # A directory named python (rare but possible if someone unzipped a
+    # broken archive over their venv) would fail here with a clear
+    # message rather than crashing the subprocess probe below.
+    if not python.is_file():
+        raise RuntimeError(
+            f"bin/python is not a regular file: {python}"
+        )
     if not os.access(str(python), os.X_OK):
         raise RuntimeError(f"bin/python is not executable: {python}")
 

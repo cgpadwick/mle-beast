@@ -154,9 +154,21 @@ def _cap_raw(text: str) -> str:
 def run_shell_command(command: str, timeout: int = 30, max_chars: int = 4000) -> str:
     base_path, _, env = _get_workspace_env()
     try:
-        venv_activate = base_path / "venv" / "bin" / "activate"
-        if venv_activate.exists():
-            command = f". {venv_activate} && {command}"
+        # If the user supplied a BYO environment, source THAT activate
+        # script. Otherwise source <workspace>/venv/bin/activate (the
+        # default greenfield venv) when it exists. Without this branch
+        # a leftover <workspace>/venv from a prior run would shadow the
+        # user's chosen environment and the agent would silently run
+        # against the wrong interpreter.
+        env_override = WorkspaceRegistry.get_environment()
+        if env_override is not None:
+            byo_activate = env_override / "bin" / "activate"
+            if byo_activate.exists():
+                command = f". {byo_activate} && {command}"
+        else:
+            venv_activate = base_path / "venv" / "bin" / "activate"
+            if venv_activate.exists():
+                command = f". {venv_activate} && {command}"
 
         result = run_command(
             command, shell=True, capture_output=True, text=True,
