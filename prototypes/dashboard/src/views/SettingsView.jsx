@@ -1,11 +1,11 @@
-// Settings page — fetches /api/settings, edits in-place, saves back.
+// Settings + Admin page. Two tabs:
+//   "Settings" — fetches /api/settings, edits in-place, POSTs to /api/settings.
+//   "Admin"    — DB stats + destructive maintenance (delete-old / reset).
 //
-// Replaces the old Jinja /settings page that was removed when this
-// project went open-source. Same fields, modern look. Field types are
-// inferred from the JSON value: number inputs for ints, text inputs
-// for strings, a dropdown for log_level (small fixed set).
+// Replaces both the old Jinja /settings and /admin pages that were
+// removed when the project went open-source. Same fields, modern look.
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { Card } from "../primitives.jsx";
 
@@ -62,6 +62,7 @@ const LOG_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR"];
 
 
 function SettingsView({ onClose }) {
+  const [tab, setTab] = useState("settings");
   const [settings, setSettings] = useState(null);
   const [provider, setProvider] = useState("");
   const [saving, setSaving] = useState(false);
@@ -120,7 +121,7 @@ function SettingsView({ onClose }) {
 
   return (
     <div style={{ flex: 1, overflow: "auto", padding: "24px 28px", maxWidth: 920 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div>
           <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Settings</h2>
           <div style={{ fontSize: 11, color: "var(--text-subtle)" }}>
@@ -135,6 +136,50 @@ function SettingsView({ onClose }) {
         }}>← back</button>
       </div>
 
+      {/* Tabs: Settings (configurable values) | Admin (destructive DB ops).
+          Kept in one page since they're both "server-side state I might
+          want to change," but separated by a tab so the destructive
+          stuff isn't sitting next to the routine fields. */}
+      <div style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--border)", marginBottom: 16 }}>
+        {[
+          { key: "settings", label: "Settings" },
+          { key: "admin",    label: "Admin" },
+        ].map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)} style={{
+            padding: "8px 18px",
+            fontSize: 12, fontWeight: 600, cursor: "pointer",
+            fontFamily: "'JetBrains Mono',monospace",
+            border: "none",
+            borderBottom: tab === t.key ? "2px solid #818cf8" : "2px solid transparent",
+            background: "transparent",
+            color: tab === t.key ? "#a5b4fc" : "var(--text-subtle)",
+            marginBottom: -1,
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {tab === "settings" && (
+        <SettingsTab
+          settings={settings}
+          provider={provider}
+          update={update}
+          save={save}
+          saving={saving}
+          savedMsg={savedMsg}
+          inputStyle={inputStyle}
+          labelStyle={labelStyle}
+        />
+      )}
+
+      {tab === "admin" && <AdminTab />}
+    </div>
+  );
+}
+
+
+function SettingsTab({ settings, provider, update, save, saving, savedMsg, inputStyle, labelStyle }) {
+  return (
+    <>
       {provider && (
         <Card style={{ padding: "10px 14px", marginBottom: 12 }}>
           <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-faint)", letterSpacing: "1.5px", fontFamily: "'JetBrains Mono',monospace" }}>DETECTED LOCAL MODEL</span>
@@ -192,8 +237,174 @@ function SettingsView({ onClose }) {
           </span>
         )}
       </div>
+    </>
+  );
+}
+
+
+function AdminTab() {
+  const [stats, setStats] = useState(null);
+  const [days, setDays] = useState(30);
+  const [resetConfirm, setResetConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const refreshStats = () => {
+    fetch("/api/admin/stats").then(r => r.json()).then(setStats).catch(() => {});
+  };
+  useEffect(refreshStats, []);
+
+  const deleteOld = async () => {
+    if (!confirm(`Delete all runs older than ${days} days? This can't be undone.`)) return;
+    setBusy(true); setMsg(null);
+    try {
+      const res = await fetch("/api/admin/delete-old-runs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ days: Number(days) }),
+      });
+      const body = await res.json();
+      if (res.ok) setMsg({ ok: true, txt: `Deleted ${body.deleted} runs.` });
+      else setMsg({ ok: false, txt: `Failed: ${body.error || res.status}` });
+      refreshStats();
+    } catch (err) {
+      setMsg({ ok: false, txt: String(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reset = async () => {
+    if (resetConfirm !== "RESET") {
+      setMsg({ ok: false, txt: 'Type "RESET" in the box to confirm.' });
+      return;
+    }
+    if (!confirm("This will delete ALL runs, stages, events, and experiments. Settings are preserved. Continue?")) return;
+    setBusy(true); setMsg(null);
+    try {
+      const res = await fetch("/api/admin/reset-database", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "RESET" }),
+      });
+      const body = await res.json();
+      if (res.ok) {
+        setMsg({ ok: true, txt: "Database reset." });
+        setResetConfirm("");
+      } else {
+        setMsg({ ok: false, txt: `Failed: ${body.error || res.status}` });
+      }
+      refreshStats();
+    } catch (err) {
+      setMsg({ ok: false, txt: String(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const danger = {
+    background: "rgba(248,113,113,0.1)",
+    border: "1px solid rgba(248,113,113,0.35)",
+    color: "#fca5a5", fontSize: 12, fontWeight: 600,
+    padding: "8px 16px", borderRadius: 8, cursor: busy ? "wait" : "pointer",
+    opacity: busy ? 0.5 : 1,
+  };
+  const inputStyle = {
+    width: 120, padding: "7px 10px",
+    background: "var(--code-bg)", border: "1px solid var(--border)",
+    borderRadius: 8, color: "var(--text)", fontSize: 12,
+    fontFamily: "'JetBrains Mono',monospace",
+  };
+
+  return (
+    <>
+      {/* Stats */}
+      <Card style={{ padding: 18, marginBottom: 12 }}>
+        <div style={{ fontSize: 9, fontWeight: 700, color: "var(--text-faint)", letterSpacing: "1.5px", fontFamily: "'JetBrains Mono',monospace", marginBottom: 12 }}>
+          DATABASE
+        </div>
+        {!stats ? <div style={{ fontSize: 11, color: "var(--text-subtle)" }}>Loading stats…</div> : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16 }}>
+            <Stat label="Runs"   value={stats.runs_count} />
+            <Stat label="Stages" value={stats.stages_count} />
+            <Stat label="Events" value={stats.events_count} />
+            <Stat label="DB size" value={`${(stats.db_size_bytes/1024/1024).toFixed(2)} MB`} />
+          </div>
+        )}
+        {stats?.runs_by_status && Object.keys(stats.runs_by_status).length > 0 && (
+          <div style={{ marginTop: 14, fontSize: 11, color: "var(--text-subtle)", fontFamily: "'JetBrains Mono',monospace" }}>
+            By status:{" "}
+            {Object.entries(stats.runs_by_status).map(([k, v], i) => (
+              <span key={k} style={{ marginRight: 12 }}>
+                {k}={v}{i < Object.entries(stats.runs_by_status).length - 1 ? "," : ""}
+              </span>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Delete old runs */}
+      <Card style={{ padding: 18, marginBottom: 12 }}>
+        <div style={{ fontSize: 9, fontWeight: 700, color: "var(--text-faint)", letterSpacing: "1.5px", fontFamily: "'JetBrains Mono',monospace", marginBottom: 8 }}>
+          DELETE OLD RUNS
+        </div>
+        <div style={{ fontSize: 11, color: "var(--text-subtle)", marginBottom: 12 }}>
+          Removes runs created more than N days ago plus their stages, events, and experiments. Settings are preserved.
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }}>older than</span>
+          <input style={inputStyle} type="number" min="1" value={days} onChange={e => setDays(e.target.value)} />
+          <span style={{ fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }}>days</span>
+          <button onClick={deleteOld} disabled={busy} style={danger}>Delete</button>
+        </div>
+      </Card>
+
+      {/* Full reset */}
+      <Card style={{ padding: 18, marginBottom: 12, borderColor: "rgba(248,113,113,0.25)" }}>
+        <div style={{ fontSize: 9, fontWeight: 700, color: "#fca5a5", letterSpacing: "1.5px", fontFamily: "'JetBrains Mono',monospace", marginBottom: 8 }}>
+          DANGER ZONE — RESET DATABASE
+        </div>
+        <div style={{ fontSize: 11, color: "var(--text-subtle)", marginBottom: 12 }}>
+          Deletes ALL runs, stages, events, and experiments. Your <code style={{ fontFamily: "'JetBrains Mono',monospace" }}>settings</code> row is preserved. Type <code style={{ fontFamily: "'JetBrains Mono',monospace" }}>RESET</code> to confirm.
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <input
+            style={{ ...inputStyle, width: 160 }}
+            placeholder="type RESET"
+            value={resetConfirm}
+            onChange={e => setResetConfirm(e.target.value)}
+          />
+          <button onClick={reset} disabled={busy || resetConfirm !== "RESET"} style={{
+            ...danger,
+            opacity: (busy || resetConfirm !== "RESET") ? 0.4 : 1,
+            cursor: (busy || resetConfirm !== "RESET") ? "not-allowed" : "pointer",
+          }}>
+            Reset Database
+          </button>
+        </div>
+      </Card>
+
+      {msg && (
+        <div style={{
+          fontSize: 11, fontFamily: "'JetBrains Mono',monospace", marginTop: 14,
+          color: msg.ok ? "#4ade80" : "#fca5a5",
+        }}>
+          {msg.txt}
+        </div>
+      )}
+    </>
+  );
+}
+
+
+function Stat({ label, value }) {
+  return (
+    <div>
+      <div style={{ fontSize: 8, fontWeight: 700, color: "var(--text-faint)", letterSpacing: "1.5px", fontFamily: "'JetBrains Mono',monospace", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>{value}</div>
     </div>
   );
 }
+
 
 export { SettingsView };
