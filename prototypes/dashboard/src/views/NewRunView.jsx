@@ -233,7 +233,7 @@ function NewRunView({ onCreated, onCancel }) {
           <div style={{ fontSize: 10, color: "var(--text-faint)", marginTop: 6 }}>
             Point at an existing Python venv or conda env. Skips the ~50 GB
             ml-frameworks install — the agent uses your environment directly.
-            Requires <code style={{ fontFamily: "'JetBrains Mono',monospace" }}>bin/python</code> and pytest. May add packages to your env via <code style={{ fontFamily: "'JetBrains Mono',monospace" }}>pip install</code> during the run.
+            Requires <code style={{ fontFamily: "'JetBrains Mono',monospace" }}>bin/python</code>, pip, and pytest. (Heads up: <code style={{ fontFamily: "'JetBrains Mono',monospace" }}>uv venv</code> skips pip by default — run <code style={{ fontFamily: "'JetBrains Mono',monospace" }}>python -m ensurepip</code> after creating the env.) May add packages to your env via <code style={{ fontFamily: "'JetBrains Mono',monospace" }}>pip install</code> during the run.
           </div>
           {envProbe?.ok === true && (
             <div style={{ fontSize: 10, color: "#4ade80", marginTop: 6, fontFamily: "'JetBrains Mono',monospace" }}>

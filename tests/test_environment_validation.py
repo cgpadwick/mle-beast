@@ -21,32 +21,62 @@ from mle_beast.workspace import (
 )
 
 
-def _make_fake_venv(root: Path, *, with_pytest: bool = True) -> Path:
-    """Build a minimal directory that looks like a venv to validator.
+def _make_fake_venv(
+    root: Path,
+    *,
+    with_pytest: bool = True,
+    with_pip: bool = True,
+) -> Path:
+    """Build a minimal directory that looks like a venv to the validator.
 
-    The validator only requires:
-      <root>/bin/python   — executable that runs Python
-      python -c "import pytest"  — succeeds
+    Validator requires:
+      <root>/bin/python      — executable that runs Python
+      python -m pip --version — exits 0
+      python -c "import pytest" — exits 0
 
-    We satisfy both by symlinking real sys.executable as <root>/bin/python.
-    pytest is already importable in the test's interpreter, so the import
-    probe passes (when with_pytest=True).
+    Default: symlink real sys.executable + the test env already has
+    pytest and pip importable, so both probes pass.
+
+    with_pytest=False / with_pip=False swap in a wrapper script that
+    fails the corresponding probe without affecting the others.
     """
     bin_dir = root / "bin"
     bin_dir.mkdir(parents=True)
     py = bin_dir / "python"
     os.symlink(sys.executable, py)
     if not with_pytest:
-        # Drop a wrapper that hides pytest from sys.path. We can't truly
-        # "uninstall" pytest from the test venv — instead we make the
-        # bin/python a small shell script that strips pytest from
-        # PYTHONPATH and re-execs.
+        # Block invocations that mention `pytest` (the validator's probe
+        # is exactly `python -c "import pytest"`) while letting `pip
+        # --version` and other invocations through. That way the pytest
+        # probe fails but the pip probe before it still succeeds.
         py.unlink()
         wrapper = bin_dir / "python"
         wrapper.write_text(
             "#!/usr/bin/env bash\n"
-            "# Hide site-packages so pytest is not importable.\n"
-            f"exec {sys.executable} -S -c 'raise ImportError(\"hidden\")' \"$@\"\n"
+            "for arg in \"$@\"; do\n"
+            "  if [[ \"$arg\" == *pytest* ]]; then\n"
+            "    echo 'ImportError: hidden' >&2\n"
+            "    exit 1\n"
+            "  fi\n"
+            "done\n"
+            f"exec {sys.executable} \"$@\"\n"
+        )
+        wrapper.chmod(0o755)
+    elif not with_pip:
+        # Wrapper that lets normal `-c` invocations through but makes
+        # `-m pip` fail. Mimics uv's pip-less venvs.
+        py.unlink()
+        wrapper = bin_dir / "python"
+        wrapper.write_text(
+            "#!/usr/bin/env bash\n"
+            "# Pass through everything EXCEPT `-m pip` calls.\n"
+            "for arg in \"$@\"; do\n"
+            "  if [ \"$arg\" = \"pip\" ]; then\n"
+            "    echo 'No module named pip' >&2\n"
+            "    exit 1\n"
+            "  fi\n"
+            "done\n"
+            f"exec {sys.executable} \"$@\"\n"
         )
         wrapper.chmod(0o755)
     return root
@@ -95,6 +125,17 @@ class TestValidateEnvironmentPath:
     def test_rejects_when_pytest_not_importable(self, tmp_path):
         env = _make_fake_venv(tmp_path / "no_pytest", with_pytest=False)
         with pytest.raises(RuntimeError, match="pytest not importable"):
+            validate_environment_path(env)
+
+    def test_rejects_when_pip_not_available(self, tmp_path):
+        """Regression for the uv-venv-without-pip case the user hit:
+        `uv venv` creates a venv without pip, so the agent's recovery
+        loop (pip install <missing-pkg>) can't function. Validator must
+        block this with a clear, actionable error so the user adds pip
+        before the run starts.
+        """
+        env = _make_fake_venv(tmp_path / "no_pip", with_pip=False)
+        with pytest.raises(RuntimeError, match="pip not available"):
             validate_environment_path(env)
 
 

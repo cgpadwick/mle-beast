@@ -98,7 +98,12 @@ def validate_environment_path(env_path: _PathLike) -> Path:
     Checks:
       1. Path expansion + exists + is a directory.
       2. `<path>/bin/python` is a real, executable file.
-      3. `<path>/bin/python -c "import pytest"` exits 0 (the pipeline
+      3. `<path>/bin/python -m pip --version` exits 0 (the agent's
+         recovery loop installs missing packages via pip — without
+         it, every ModuleNotFoundError is unrecoverable. `uv venv`
+         specifically does NOT install pip by default, so this is the
+         likely failure mode for uv users).
+      4. `<path>/bin/python -c "import pytest"` exits 0 (the pipeline
          smoke-tests via pytest, so this is non-negotiable).
 
     Returns the resolved Path on success. Raises RuntimeError with an
@@ -129,6 +134,24 @@ def validate_environment_path(env_path: _PathLike) -> Path:
         )
     if not os.access(str(python), os.X_OK):
         raise RuntimeError(f"bin/python is not executable: {python}")
+
+    # pip first — without it the agent can't recover from missing-package
+    # errors, and uv-created venvs lack pip by default which is the most
+    # likely way users hit this.
+    probe = subprocess.run(
+        [str(python), "-m", "pip", "--version"],
+        capture_output=True, text=True, timeout=15,
+    )
+    if probe.returncode != 0:
+        raise RuntimeError(
+            f"pip not available in {p}.\n"
+            f"The agent installs missing packages via pip during runs, so "
+            f"this env needs pip even if you don't use it directly. "
+            f"`uv venv` skips pip by default — install it with one of:\n"
+            f"  {python} -m ensurepip --upgrade\n"
+            f"  uv pip install pip   (if you used uv to create this env)\n"
+            f"(probe stderr: {probe.stderr.strip() or '<empty>'})"
+        )
 
     probe = subprocess.run(
         [str(python), "-c", "import pytest"],
