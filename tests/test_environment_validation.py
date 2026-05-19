@@ -132,6 +132,54 @@ class TestWorkspaceRegistryEnvironment:
         assert WorkspaceRegistry.get_environment() is None
 
 
+class TestSetupRunContextHandlesMissingDatasetPath:
+    """Regression for the metric_name-without-dataset_path crash.
+
+    Before the fix: setting metric_name in the form (a sensible thing for
+    users to do) but leaving dataset_path empty would crash inside
+    pipeline_runner._setup_run_context with `Path(None)` -> TypeError, and
+    the run would die immediately with no useful UI signal. The user
+    couldn't even see the activity feed because the run failed before
+    any stage event fired.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _isolate(self, tmp_path):
+        WorkspaceRegistry.clear_workspace()
+        yield
+        WorkspaceRegistry.clear_workspace()
+
+    def test_runs_without_dataset_path(self, tmp_path):
+        from mle_beast.pipeline_runner import _setup_run_context
+
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        run_row = {
+            "workspace": str(ws),
+            "metric_name": "accuracy",  # provided
+            "dataset_path": None,         # not provided — must NOT crash
+        }
+        # Should resolve and return the workspace path with no exception.
+        result = _setup_run_context(run_row)
+        assert result == ws.resolve()
+        # No read-path was added since dataset_path was None.
+        assert WorkspaceRegistry.get_allowed_read_paths() == []
+
+    def test_adds_allowlist_when_dataset_path_set(self, tmp_path):
+        from mle_beast.pipeline_runner import _setup_run_context
+
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        data = tmp_path / "data"
+        data.mkdir()
+        # Note: NO metric_name set. The allowlist should still fire
+        # because the agent needs read access to the dataset regardless.
+        run_row = {"workspace": str(ws), "dataset_path": str(data)}
+        _setup_run_context(run_row)
+        paths = WorkspaceRegistry.get_allowed_read_paths()
+        assert data.resolve() in paths
+
+
 class TestGetWorkspaceEnvHonorsRegistry:
     """tools/execution._get_workspace_env should pick up the BYO env."""
 

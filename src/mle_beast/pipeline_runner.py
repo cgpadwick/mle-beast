@@ -166,15 +166,16 @@ def _setup_run_context(run_row: dict):
     WorkspaceRegistry.set_workspace). Caller passes this to
     _build_shared_dict so the dict construction can stay side-effect-free.
 
-    The metric_name-gated add_allowed_read_path is preserved from the
-    original — it's almost certainly an unrelated bug (the dataset path
-    needs to be readable regardless of whether a metric_name is set),
-    but fixing that is out of scope for this structural PR.
+    The original code gated the dataset allowlist on `metric_name` being
+    set, which was a bug: the agent's file_ops tools need read access to
+    the dataset regardless of whether a metric name was provided. And
+    when metric_name WAS set but dataset_path wasn't, this crashed with
+    a TypeError on `Path(None)`. Fixed to guard on dataset_path directly.
     """
     from mle_beast.workspace import WorkspaceRegistry
 
     ws = WorkspaceRegistry.set_workspace(run_row["workspace"])
-    if run_row.get("metric_name"):
+    if run_row.get("dataset_path"):
         WorkspaceRegistry.add_allowed_read_path(run_row["dataset_path"])
     return ws
 
