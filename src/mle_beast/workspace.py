@@ -87,11 +87,65 @@ def check_workspace_env(workspace: _PathLike, mode: Optional[str] = None) -> Non
             )
 
 
+def validate_environment_path(env_path: _PathLike) -> Path:
+    """Validate a user-provided Python environment for use as the run's venv.
+
+    Used by the BYO-environment path (RunConfig.environment): the user
+    points at an existing venv/conda env and the pipeline reuses it
+    instead of building a fresh one. If the env can't be used, we want a
+    clear error BEFORE the run starts rather than mid-pipeline.
+
+    Checks:
+      1. Path expansion + exists + is a directory.
+      2. `<path>/bin/python` is a real, executable file.
+      3. `<path>/bin/python -c "import pytest"` exits 0 (the pipeline
+         smoke-tests via pytest, so this is non-negotiable).
+
+    Returns the resolved Path on success. Raises RuntimeError with an
+    actionable message on any failure.
+    """
+    p = Path(env_path).expanduser().resolve()
+
+    if not p.exists():
+        raise RuntimeError(f"environment path does not exist: {p}")
+    if not p.is_dir():
+        raise RuntimeError(f"environment path is not a directory: {p}")
+
+    python = p / "bin" / "python"
+    if not python.exists():
+        raise RuntimeError(
+            f"no bin/python under {p}.\n"
+            f"Expected a Python venv or conda environment root containing "
+            f"bin/python. Activate the env once and try `which python` to "
+            f"find the right path."
+        )
+    if not os.access(str(python), os.X_OK):
+        raise RuntimeError(f"bin/python is not executable: {python}")
+
+    probe = subprocess.run(
+        [str(python), "-c", "import pytest"],
+        capture_output=True, text=True, timeout=15,
+    )
+    if probe.returncode != 0:
+        raise RuntimeError(
+            f"pytest not importable in {p}.\n"
+            f"The pipeline runs smoke tests via pytest. Install it with:\n"
+            f"  {python} -m pip install pytest\n"
+            f"(probe stderr: {probe.stderr.strip() or '<empty>'})"
+        )
+
+    return p
+
+
 class WorkspaceRegistry:
     """In-process registry for the current workspace path."""
 
     _workspace: Optional[Path] = None
     _allowed_read_paths: list[Path] = []
+    # When set, tools point at this directory's bin/python instead of
+    # <workspace>/venv/. Populated from RunConfig.environment by the
+    # pipeline runner before any tool calls.
+    _environment: Optional[Path] = None
 
     @classmethod
     def set_workspace(cls, path: _PathLike) -> Path:
@@ -111,6 +165,24 @@ class WorkspaceRegistry:
         return list(cls._allowed_read_paths)
 
     @classmethod
+    def set_environment(cls, path: Optional[_PathLike]) -> Optional[Path]:
+        """Pin the Python environment the agent's tools should use.
+
+        Pass `None` to clear. Stored as a resolved absolute Path.
+        """
+        if path is None:
+            cls._environment = None
+            return None
+        p = Path(path).expanduser().resolve()
+        cls._environment = p
+        return p
+
+    @classmethod
+    def get_environment(cls) -> Optional[Path]:
+        """Return the user-pinned environment, or None to use workspace/venv."""
+        return cls._environment
+
+    @classmethod
     def get_workspace(cls, default: Optional[_PathLike] = None) -> Path:
         if cls._workspace is not None:
             return cls._workspace
@@ -123,6 +195,8 @@ class WorkspaceRegistry:
     @classmethod
     def clear_workspace(cls) -> None:
         cls._workspace = None
+        cls._allowed_read_paths.clear()
+        cls._environment = None
 
 
 class WorkspaceCreator:

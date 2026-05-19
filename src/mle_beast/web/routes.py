@@ -36,6 +36,9 @@ class CreateRunRequest(BaseModel):
     lower_is_better: Optional[bool] = None
     # Free-text metric name like "accuracy" / "f1_macro" / "rmse".
     metric_name: Optional[str] = None
+    # Optional path to a pre-existing Python venv / conda env. When set,
+    # skips the ~50GB ml-frameworks install — see RunConfig.environment.
+    environment: Optional[str] = None
 
 
 class RunResponse(BaseModel):
@@ -55,6 +58,7 @@ class RunResponse(BaseModel):
     experiment_branch: Optional[str] = None
     lower_is_better: Optional[bool] = None
     metric_name: Optional[str] = None
+    environment: Optional[str] = None
     total_cost_usd: float = 0.0
     total_prompt_tokens: int = 0
     total_completion_tokens: int = 0
@@ -80,6 +84,7 @@ class RunResponse(BaseModel):
             experiment_branch=info.experiment_branch,
             lower_is_better=info.lower_is_better,
             metric_name=info.metric_name,
+            environment=info.environment,
             total_cost_usd=info.total_cost_usd,
             total_prompt_tokens=info.total_prompt_tokens,
             total_completion_tokens=info.total_completion_tokens,
@@ -137,6 +142,17 @@ def register_routes(app: FastAPI) -> None:
 
     @app.post("/api/runs")
     async def api_create_run(req: CreateRunRequest):
+        # Preflight-validate the user's environment path (if given) so they
+        # get an immediate 400 with a clear message instead of seeing the
+        # run fail seconds later. The pipeline runner re-validates anyway
+        # — this is purely a UX nicety.
+        if req.environment and req.environment.strip():
+            from mle_beast.workspace import validate_environment_path
+            try:
+                validate_environment_path(req.environment.strip())
+            except RuntimeError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
+
         manager = get_run_manager()
         config = RunConfig(
             workspace=req.workspace,
@@ -148,6 +164,7 @@ def register_routes(app: FastAPI) -> None:
             setup_workspace=req.setup_workspace,
             lower_is_better=req.lower_is_better,
             metric_name=req.metric_name,
+            environment=req.environment,
         )
         run_id = manager.create_run(config)
         manager.start_run(run_id)
@@ -155,6 +172,30 @@ def register_routes(app: FastAPI) -> None:
             {"id": run_id, "status": "running"},
             status_code=201,
         )
+
+    @app.post("/api/validate-environment")
+    async def api_validate_environment(request: Request):
+        """Probe a user-supplied env path. Returns 200 {ok:true} or
+        400 {ok:false, error:"..."} with a human-readable explanation.
+
+        Lets the new-run form give immediate feedback on the env field
+        before the user clicks Submit.
+        """
+        from mle_beast.workspace import validate_environment_path
+
+        body = await request.json()
+        path = (body.get("path") or "").strip()
+        if not path:
+            return JSONResponse(
+                {"ok": False, "error": "no path provided"}, status_code=400,
+            )
+        try:
+            resolved = validate_environment_path(path)
+        except RuntimeError as e:
+            return JSONResponse(
+                {"ok": False, "error": str(e)}, status_code=400,
+            )
+        return {"ok": True, "resolved": str(resolved)}
 
     @app.get("/api/runs/{run_id}")
     async def api_get_run(run_id: str):

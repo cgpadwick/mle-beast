@@ -167,6 +167,9 @@ class Database:
         self._ensure_column("runs", "total_completion_tokens", "INTEGER DEFAULT 0")
         self._ensure_column("runs", "total_reasoning_tokens", "INTEGER DEFAULT 0")
         self._ensure_column("runs", "total_llm_calls", "INTEGER DEFAULT 0")
+        # BYO Python environment: path to a venv/conda env to reuse instead
+        # of building one via WorkspaceCreator. NULL = use the default.
+        self._ensure_column("runs", "environment", "TEXT")
 
     def _ensure_column(self, table: str, column: str, decl: str) -> None:
         """Add a column if it doesn't already exist. Idempotent."""
@@ -182,19 +185,21 @@ class Database:
 
     def insert_run(self, run: dict) -> None:
         conn = self._get_conn()
-        # lower_is_better and metric_name are optional — keep insert_run
-        # callable from older callers by defaulting to NULL when absent.
+        # Optional fields default to NULL so old callers keep working
+        # without knowing about every new column.
         run = {**run}
         run.setdefault("lower_is_better", None)
         run.setdefault("metric_name", None)
+        run.setdefault("environment", None)
         conn.execute(
             """INSERT INTO runs
                (id, status, workspace, task, target_accuracy, dataset_path,
                 mode, force_cpu, setup_workspace, lower_is_better,
-                metric_name, created_at)
+                metric_name, environment, created_at)
                VALUES (:id, :status, :workspace, :task, :target_accuracy,
                        :dataset_path, :mode, :force_cpu, :setup_workspace,
-                       :lower_is_better, :metric_name, :created_at)""",
+                       :lower_is_better, :metric_name, :environment,
+                       :created_at)""",
             run,
         )
         conn.commit()

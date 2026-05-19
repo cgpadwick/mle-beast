@@ -63,6 +63,7 @@ def run_pipeline_via_manager(
     mode: str = "greenfield",
     lower_is_better: Optional[bool] = None,
     metric_name: Optional[str] = None,
+    environment: Optional[str] = None,
 ):
     """Drive a pipeline through RunManager so it appears in the web UI.
 
@@ -76,6 +77,10 @@ def run_pipeline_via_manager(
     metrics; False for accuracy/F1/AUC. The integration tests all use
     accuracy and pass False so a misclassified metric direction can't
     silently flip the hill-climb.
+
+    `environment` points the pipeline at a user-supplied Python venv
+    instead of using WorkspaceCreator. Skips the multi-GB ml-frameworks
+    install — see RunConfig.environment.
     """
     from mle_beast.run_manager import RunConfig, get_run_manager
 
@@ -89,6 +94,7 @@ def run_pipeline_via_manager(
         setup_workspace=False,  # fixtures already set up the workspace
         lower_is_better=lower_is_better,
         metric_name=metric_name,
+        environment=environment,
     )
     manager = get_run_manager()
     run_id = manager.create_run(config)

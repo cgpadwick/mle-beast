@@ -79,6 +79,13 @@ class RunConfig:
     # so it picks the correct field out of training logs even when the
     # agent's train.py emphasizes something else.
     metric_name: Optional[str] = None
+    # BYO Python environment. When set, the pipeline reuses this venv/
+    # conda env's bin/python instead of creating one via WorkspaceCreator
+    # (which downloads the ~50GB ml-frameworks stack). Validated at run
+    # start — if bin/python is missing or pytest isn't importable, the
+    # run is marked failed with a clear message rather than crashing
+    # mid-pipeline. Takes precedence over `setup_workspace`.
+    environment: Optional[str] = None
 
 
 @dataclass
@@ -101,6 +108,7 @@ class RunInfo:
     experiment_branch: Optional[str] = None
     lower_is_better: Optional[bool] = None
     metric_name: Optional[str] = None
+    environment: Optional[str] = None
     total_cost_usd: float = 0.0
     total_prompt_tokens: int = 0
     total_completion_tokens: int = 0
@@ -128,6 +136,7 @@ class RunInfo:
             experiment_branch=row.get("experiment_branch"),
             lower_is_better=None if lib is None else bool(lib),
             metric_name=row.get("metric_name"),
+            environment=row.get("environment"),
             total_cost_usd=float(row.get("total_cost_usd") or 0.0),
             total_prompt_tokens=int(row.get("total_prompt_tokens") or 0),
             total_completion_tokens=int(row.get("total_completion_tokens") or 0),
@@ -192,6 +201,7 @@ class RunManager:
             "lower_is_better": (None if config.lower_is_better is None
                                  else int(config.lower_is_better)),
             "metric_name": (config.metric_name.strip() if config.metric_name else None) or None,
+            "environment": (config.environment.strip() if config.environment else None) or None,
             "created_at": now,
         })
 

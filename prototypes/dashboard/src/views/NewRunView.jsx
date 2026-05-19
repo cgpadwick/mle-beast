@@ -20,9 +20,17 @@ function NewRunView({ onCreated, onCancel }) {
     direction: "auto",
     // Free-text metric name. When set, the val-score extractor pins on it.
     metric_name: "",
+    // BYO Python environment. Empty = use setup_workspace flow (slow,
+    // big download). Non-empty = absolute path to a venv/conda env root.
+    environment: "",
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  // Preflight validation state for the environment field. Tri-state:
+  //   null     → not yet checked
+  //   {ok:true} → resolved
+  //   {ok:false, error} → checked + failed (show inline)
+  const [envProbe, setEnvProbe] = useState(null);
 
   const update = (key) => (e) => setForm({ ...form, [key]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
 
@@ -47,6 +55,7 @@ function NewRunView({ onCreated, onCancel }) {
       setup_workspace: form.setup_workspace,
       lower_is_better: lowerIsBetter,
       metric_name: form.metric_name.trim() || null,
+      environment: form.environment.trim() || null,
     };
     try {
       const res = await API.createRun(body);
@@ -185,9 +194,59 @@ function NewRunView({ onCreated, onCancel }) {
           </div>
         </Card>
 
+        <Card style={{ padding: 18, marginBottom: 12 }}>
+          <label style={labelStyle}>EXISTING ENVIRONMENT (optional)</label>
+          <input
+            style={{
+              ...inputStyle,
+              borderColor: envProbe?.ok === false ? "rgba(248,113,113,0.55)" : "var(--border)",
+            }}
+            value={form.environment}
+            onChange={(e) => {
+              setEnvProbe(null);
+              setForm({ ...form, environment: e.target.value });
+            }}
+            onBlur={async () => {
+              const path = form.environment.trim();
+              if (!path) { setEnvProbe(null); return; }
+              try {
+                const res = await fetch("/api/validate-environment", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ path }),
+                });
+                const body = await res.json();
+                setEnvProbe(body);
+              } catch (err) {
+                setEnvProbe({ ok: false, error: String(err) });
+              }
+            }}
+            placeholder="/home/me/.venvs/ml/  (leave empty to install ml-frameworks)"
+          />
+          <div style={{ fontSize: 10, color: "var(--text-faint)", marginTop: 6 }}>
+            Point at an existing Python venv or conda env. Skips the ~50 GB
+            ml-frameworks install — the agent uses your environment directly.
+            Requires <code style={{ fontFamily: "'JetBrains Mono',monospace" }}>bin/python</code> and pytest. May add packages to your env via <code style={{ fontFamily: "'JetBrains Mono',monospace" }}>pip install</code> during the run.
+          </div>
+          {envProbe?.ok === true && (
+            <div style={{ fontSize: 10, color: "#4ade80", marginTop: 6, fontFamily: "'JetBrains Mono',monospace" }}>
+              ✓ {envProbe.resolved}
+            </div>
+          )}
+          {envProbe?.ok === false && (
+            <div style={{
+              fontSize: 10, color: "#fca5a5", marginTop: 6,
+              fontFamily: "'JetBrains Mono',monospace", whiteSpace: "pre-wrap",
+            }}>
+              ✗ {envProbe.error}
+            </div>
+          )}
+        </Card>
+
         <Card style={{ padding: 14, marginBottom: 14 }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", marginBottom: 8 }}>
-            <input type="checkbox" checked={form.setup_workspace} onChange={update("setup_workspace")} />
+          <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", marginBottom: 8, opacity: form.environment.trim() ? 0.4 : 1 }}
+                 title={form.environment.trim() ? "Disabled: an existing environment is set; setup is skipped." : ""}>
+            <input type="checkbox" checked={form.setup_workspace} onChange={update("setup_workspace")} disabled={!!form.environment.trim()} />
             <span style={{ fontSize: 12 }}>Set up workspace (install ml-frameworks)</span>
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>

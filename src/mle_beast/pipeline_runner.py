@@ -96,14 +96,48 @@ def execute_pipeline(
 def _ensure_workspace(run_row: dict, bus: EventBus, db: Database, run_id: str) -> None:
     """Make sure the workspace dir exists and (optionally) is fully provisioned.
 
-    Always creates the bare directory — saves the user from a
-    FileNotFoundError mid-run when they typed a path that doesn't exist
-    yet. The heavier `setup_workspace` flag (which provisions a venv +
-    ML stack) is still opt-in.
+    Three cases, in priority order:
+
+    1. `environment` is set — BYO Python env. Validate the user's path,
+       skip WorkspaceCreator entirely. Takes precedence over
+       `setup_workspace` because if the user gave us a path they want
+       us to use it, not download a fresh stack.
+
+    2. `setup_workspace=True` — run WorkspaceCreator, which clones
+       ml-frameworks + creates a venv + installs the ML stack. Slow
+       (~minutes to hours) but produces a known-good environment.
+
+    3. Default — assume the user manages their own venv at
+       `<workspace>/.venv` or `<workspace>/venv`. Probe it via
+       check_workspace_env before the pipeline starts so we fail fast
+       on missing prereqs.
+
+    Always creates the bare workspace directory — saves the user from
+    a FileNotFoundError mid-run when they typed a path that doesn't
+    exist yet.
     """
-    from mle_beast.workspace import WorkspaceCreator, check_workspace_env
+    from mle_beast.workspace import (
+        WorkspaceCreator,
+        WorkspaceRegistry,
+        check_workspace_env,
+        validate_environment_path,
+    )
 
     Path(run_row["workspace"]).mkdir(parents=True, exist_ok=True)
+
+    env_path = (run_row.get("environment") or "").strip() or None
+
+    if env_path:
+        # BYO env. Validate before doing anything else — if it's bad,
+        # raise so _run_pipeline marks the run failed with the message.
+        resolved = validate_environment_path(env_path)
+        WorkspaceRegistry.set_environment(resolved)
+        bus.emit(LogMessage(
+            run_id=run_id, stage="setup",
+            message=f"Using user-supplied environment: {resolved}",
+        ))
+        db.upsert_stage(run_id, "setup", status="pass")
+        return
 
     if run_row["setup_workspace"]:
         bus.emit(StageStarted(run_id=run_id, stage="setup"))
@@ -121,10 +155,6 @@ def _ensure_workspace(run_row: dict, bus: EventBus, db: Database, run_id: str) -
         ))
     else:
         # User opted out of workspace setup → they own the venv.
-        # Verify it's actually present and has pytest before we waste
-        # their time running a pipeline that'd fail on the first import.
-        # Raises RuntimeError with an actionable message if either
-        # check fails.
         check_workspace_env(run_row["workspace"], mode=run_row.get("mode"))
         db.upsert_stage(run_id, "setup", status="pass")
 

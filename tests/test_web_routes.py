@@ -315,6 +315,85 @@ class TestRunsRoutes:
         assert config.force_cpu is True
         assert config.lower_is_better is True
         assert config.metric_name == "rmse"
+        # environment defaults to None when not provided.
+        assert config.environment is None
+
+    def test_create_run_preflights_environment(
+        self, client, fake_manager, monkeypatch, tmp_path,
+    ):
+        """When `environment` is set, the route must preflight-validate
+        before inserting the run. A bad path returns 400 and never
+        reaches RunManager.create_run.
+        """
+        from mle_beast import workspace as workspace_mod
+
+        def fake_validate(path):
+            raise RuntimeError(f"fake: no bin/python under {path}")
+
+        monkeypatch.setattr(
+            workspace_mod, "validate_environment_path", fake_validate,
+        )
+
+        r = client.post("/api/runs", json={
+            "workspace": "/tmp/x",
+            "task": "x",
+            "environment": "/not/a/real/path",
+        })
+        assert r.status_code == 400
+        assert "no bin/python" in r.json()["detail"]
+        # And the run must NOT have been created.
+        assert fake_manager.created == []
+
+    def test_create_run_propagates_environment_on_success(
+        self, client, fake_manager, monkeypatch, tmp_path,
+    ):
+        from mle_beast import workspace as workspace_mod
+
+        # Stub the validator so we don't need a real venv to test wiring.
+        monkeypatch.setattr(
+            workspace_mod, "validate_environment_path",
+            lambda p: tmp_path / "ok",
+        )
+
+        r = client.post("/api/runs", json={
+            "workspace": "/tmp/x",
+            "task": "x",
+            "environment": str(tmp_path / "ok"),
+        })
+        assert r.status_code == 201
+        assert fake_manager.created[0].environment == str(tmp_path / "ok")
+
+    def test_validate_environment_endpoint_ok(self, client, monkeypatch, tmp_path):
+        from mle_beast import workspace as workspace_mod
+        monkeypatch.setattr(
+            workspace_mod, "validate_environment_path",
+            lambda p: tmp_path / "resolved",
+        )
+
+        r = client.post("/api/validate-environment", json={"path": "/foo"})
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ok"] is True
+        assert "resolved" in body["resolved"]
+
+    def test_validate_environment_endpoint_bad(self, client, monkeypatch):
+        from mle_beast import workspace as workspace_mod
+
+        def boom(_p):
+            raise RuntimeError("pytest not importable in /foo")
+
+        monkeypatch.setattr(
+            workspace_mod, "validate_environment_path", boom,
+        )
+        r = client.post("/api/validate-environment", json={"path": "/foo"})
+        assert r.status_code == 400
+        assert r.json()["ok"] is False
+        assert "pytest not importable" in r.json()["error"]
+
+    def test_validate_environment_endpoint_empty_path(self, client):
+        r = client.post("/api/validate-environment", json={"path": ""})
+        assert r.status_code == 400
+        assert "no path provided" in r.json()["error"]
 
     def test_get_run_returns_run_and_stages(self, client, fake_manager):
         fake_manager.runs["r-1"] = _make_run_info(id="r-1")

@@ -51,9 +51,24 @@ def _parse_epoch_score(line: str) -> Optional[float]:
 
 
 def _get_workspace_env() -> tuple[Path, str, dict]:
-    """Return (base_path, python_executable, env) for workspace commands."""
+    """Return (base_path, python_executable, env) for workspace commands.
+
+    Resolution order for the Python executable:
+      1. A user-pinned env via WorkspaceRegistry.get_environment() —
+         set by RunConfig.environment (BYO env path). Takes precedence.
+      2. `<workspace>/venv/bin/python` if it exists (default greenfield).
+      3. Fall back to system `python3` (means the subprocess will use
+         whatever python3 is on PATH — not ideal but not catastrophic).
+    """
     base_path = Path(WorkspaceRegistry.get_workspace()).absolute()
-    venv_python = base_path / "venv" / "bin" / "python"
+    env_override = WorkspaceRegistry.get_environment()
+
+    if env_override is not None:
+        venv_path = env_override
+    else:
+        venv_path = base_path / "venv"
+    venv_python = venv_path / "bin" / "python"
+
     if not venv_python.exists():
         python_exec = "python3"
     else:
@@ -61,7 +76,6 @@ def _get_workspace_env() -> tuple[Path, str, dict]:
 
     env = os.environ.copy()
     env["PYTHONPATH"] = str(base_path)
-    venv_path = base_path / "venv"
     if venv_path.exists():
         env["VIRTUAL_ENV"] = str(venv_path)
         env["PATH"] = f"{venv_path / 'bin'}{os.pathsep}" + env.get("PATH", "")
