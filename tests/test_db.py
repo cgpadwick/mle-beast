@@ -88,11 +88,16 @@ class TestRuns:
         assert db.get_run("nope") is None
 
     def test_insert_accepts_optional_fields_default_null(self, db):
-        # Older callers may not pass lower_is_better / metric_name.
+        # Older callers may not pass lower_is_better / metric_name / environment.
         db.insert_run(_make_run_row())
         row = db.get_run("r-1")
         assert row["lower_is_better"] is None
         assert row["metric_name"] is None
+        assert row["environment"] is None
+
+    def test_insert_persists_environment(self, db):
+        db.insert_run(_make_run_row(environment="/path/to/my/venv"))
+        assert db.get_run("r-1")["environment"] == "/path/to/my/venv"
 
     def test_update_run_writes_fields(self, db):
         db.insert_run(_make_run_row())

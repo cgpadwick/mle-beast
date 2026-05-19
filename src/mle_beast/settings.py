@@ -28,7 +28,11 @@ class Settings:
     llm_call_retries: int = 3
     training_timeout: int = 1800
     test_timeout: int = 60
-    shell_command_timeout: int = 30
+    # 30s was too short for the common case where the agent runs
+    # `pip install <heavy-package>` on a missing dep — torch / torchvision
+    # / nvidia-cuda-* can take 1-3 min on a typical connection. 180s
+    # covers that without making genuine hangs take forever to surface.
+    shell_command_timeout: int = 180
     python_file_timeout: int = 30
     command_output_max_chars: int = 4000
     test_output_max_chars: int = 2000
