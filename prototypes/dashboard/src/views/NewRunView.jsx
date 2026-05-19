@@ -1,7 +1,9 @@
 // New-run wizard.
 
 import { useState, useEffect } from "react";
+
 import { API } from "../api.js";
+import { Card } from "../primitives.jsx";
 
 function NewRunView({ onCreated, onCancel }) {
   const [form, setForm] = useState({
@@ -37,7 +39,8 @@ function NewRunView({ onCreated, onCancel }) {
     const body = {
       workspace: form.workspace.trim(),
       task: form.task.trim(),
-      target_accuracy: form.target_accuracy ? parseFloat(form.target_accuracy) : null,
+      // Use explicit-empty check so 0 (valid target) isn't treated as unset.
+      target_accuracy: form.target_accuracy !== "" ? parseFloat(form.target_accuracy) : null,
       dataset_path: form.dataset_path.trim() || null,
       mode: form.mode,
       force_cpu: form.force_cpu,

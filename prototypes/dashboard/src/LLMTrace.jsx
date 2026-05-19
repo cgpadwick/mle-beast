@@ -4,7 +4,7 @@ import { useState } from "react";
 import { cardBase } from "./constants.js";
 import { Card } from "./primitives.jsx";
 import { MessageContent, JsonView } from "./JsonView.jsx";
-import { fmtRelTime, fmtTokens } from "./format.js";
+import { fmtRelTime, fmtTokens, ROLE_COLOR } from "./format.js";
 
 function LLMCallCard({ call, runStart, defaultExpanded }) {
   const [expanded, setExpanded] = useState(!!defaultExpanded);

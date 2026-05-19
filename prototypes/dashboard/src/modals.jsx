@@ -4,7 +4,10 @@ import { useEffect } from "react";
 
 import { Card, Row, DetailRow } from "./primitives.jsx";
 import { JsonView } from "./JsonView.jsx";
-import { fmtAbsTime, fmtDuration, fmtScore } from "./format.js";
+import { LLMCallCard } from "./LLMTrace.jsx";
+import {
+  fmtAbsTime, fmtDuration, fmtRelTime, fmtScore, parseEventData,
+} from "./format.js";
 
 function DetailsModal({ run, peak, onClose }) {
   // Close on Escape
