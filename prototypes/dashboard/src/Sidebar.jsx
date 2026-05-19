@@ -67,15 +67,6 @@ function Sidebar({ view, setView, theme, onToggleTheme }) {
           </svg>
         )}
       </button>
-      <a href="/settings" target="_blank" rel="noreferrer" title="Settings (legacy page)" style={{
-        width: 42, height: 42, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center",
-        background: "transparent", color: "var(--text-faint)", marginBottom: 8, textDecoration: "none",
-      }}>
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-          <circle cx="9" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.5" />
-          <path d="M9 2V4M9 14V16M2 9H4M14 9H16M4.22 4.22L5.64 5.64M12.36 12.36L13.78 13.78M13.78 4.22L12.36 5.64M5.64 12.36L4.22 13.78" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-        </svg>
-      </a>
       <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ade80", marginBottom: 10, boxShadow: "0 0 10px rgba(74,222,128,0.4)" }} />
       <div style={{ writingMode: "vertical-rl", fontSize: 8, fontWeight: 800, letterSpacing: "2.5px", color: "var(--text-faint)", fontFamily: "'JetBrains Mono',monospace", marginBottom: 16 }}>BEAST</div>
     </div>

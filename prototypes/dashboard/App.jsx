@@ -1,9 +1,10 @@
 import { useState } from "react";
 
 import { Sidebar } from "./src/Sidebar.jsx";
-import { RunsListView } from "./src/views/RunsListView.jsx";
 import { NewRunView } from "./src/views/NewRunView.jsx";
 import { RunDetailView } from "./src/views/RunDetailView.jsx";
+import { RunsListView } from "./src/views/RunsListView.jsx";
+import { SettingsView } from "./src/views/SettingsView.jsx";
 
 
 export default function App() {
@@ -30,10 +31,40 @@ export default function App() {
 
       <Sidebar view={view} setView={setView} theme={theme} onToggleTheme={toggleTheme} />
 
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
+        {/* Fixed-position gear button — always reachable from any view.
+            Stays out of the layout flow so the underlying view doesn't
+            need to know about it. Clicking sets view=settings; when
+            already in settings, the SettingsView renders its own
+            back button so we just leave this gear visible. */}
+        <button
+          onClick={() => setView(view === "settings" ? "list" : "settings")}
+          title="Settings &amp; Admin"
+          style={{
+            position: "absolute", top: 12, right: 16, zIndex: 10,
+            width: 36, height: 36, borderRadius: 10,
+            border: "1px solid var(--border)", cursor: "pointer",
+            background: view === "settings" ? "rgba(99,102,241,0.15)" : "var(--surface)",
+            color: view === "settings" ? "#a5b4fc" : "var(--text-muted)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            transition: "all 0.15s",
+          }}
+        >
+          {/* Proper gear icon (Lucide "settings"). 8 lobes + center
+              hole, no radial spokes — visually distinct from the
+              sun/moon theme toggle in the sidebar. */}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" strokeWidth="2"
+               strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </button>
+
         {view === "list" && <RunsListView onOpen={open} onNew={() => setView("new")} />}
         {view === "new" && <NewRunView onCreated={open} onCancel={() => setView("list")} />}
         {view === "detail" && currentRunId && <RunDetailView runId={currentRunId} onBack={() => setView("list")} />}
+        {view === "settings" && <SettingsView onClose={() => setView("list")} />}
       </div>
 
       <style>{`
