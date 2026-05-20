@@ -26,42 +26,81 @@ Both modes share the same hill-climbing engine: propose → implement → test �
 
 ## Install
 
-Prerequisites for greenfield runs (mle-beast builds the workspace venv for you):
+```bash
+# Recommended — installs in an isolated venv, command goes on your PATH
+pipx install mle-beast
 
-- **git** — clones the [ml-frameworks](https://github.com/cgpadwick/ml-frameworks) stack into each new workspace
-- **poetry** — installs the pinned ml-frameworks dependency lock into the workspace venv. Install with `pipx install poetry` or `curl -sSL https://install.python-poetry.org | python3 -`
+# Or with the optional web dashboard
+pipx install 'mle-beast[web]'
 
-(Brownfield / BYO-environment runs skip both — you bring your own venv.)
+# Plain pip also works
+pip install mle-beast
+```
+
+Don't have `pipx`? `python3 -m pip install --user pipx && python3 -m pipx ensurepath` then open a new shell.
+
+**Working from a clone (e.g. contributing):**
 
 ```bash
-pip install -e .
-
-# With the optional web dashboard
-pip install -e ".[web]"
+git clone https://github.com/cgpadwick/mle-beast.git
+cd mle-beast
+pip install -e '.[web]'    # editable install — your changes are picked up live
 ```
+
+### Prerequisites
+
+mle-beast itself just needs Python 3.10+. For **greenfield** runs (where mle-beast builds a workspace venv for you) it also needs:
+
+- **git** — clones the [ml-frameworks](https://github.com/cgpadwick/ml-frameworks) stack into each workspace
+- **poetry** — installs ml-frameworks's pinned dependency lock into that workspace venv
+
+The `mle-beast init` step below diagnoses these for you and offers to install poetry via pipx if it's missing. **Brownfield / BYO-environment runs skip both** — you bring your own venv.
 
 ## Quickstart
 
-mle-beast needs an LLM provider. Pick one:
+After installing mle-beast (above), run `mle-beast init` in your project directory:
 
 ```bash
-# OpenAI
-export OPENAI_API_KEY=sk-...
-
-# Or OpenRouter (recommended — access to many models via one key)
-export OPENROUTER_API_KEY=sk-or-...
-
-# Or a local OpenAI-compatible server (vLLM, Ollama, llama.cpp, etc.)
-export LOCAL_LLM_BASE_URL=http://localhost:8000/v1
+mkdir ~/my-mle-experiment && cd ~/my-mle-experiment
+git init -q
+mle-beast init
 ```
 
-Then run a sample project:
+The init flow walks you through:
+
+1. **Prereq check** — verifies Python / poetry / git, offers to install poetry via pipx if it's missing.
+2. **LLM provider** — detects API keys already in your shell environment; if multiple are present, asks which to use. If none, prompts you to paste one in.
+3. **Model picker** — fetches the live catalog from your provider, prunes stale defaults, fuzzy-matches typos (`gpt-4o-mini` against OpenRouter → corrected to `openai/gpt-4o-mini`).
+4. **Scaffolding** — writes `.env`, ensures `.env` is gitignored, and drops an `AGENTS.md` so coding agents (Claude Code, Cursor, Aider) can drive mle-beast on your behalf.
+
+Then start the dashboard:
+
+```bash
+mle-beast    # opens http://127.0.0.1:8000 in your browser
+```
+
+Or jump straight into the CLI REPL:
+
+```bash
+mle-beast --no-web
+```
+
+Or run a sample integration test end-to-end:
 
 ```bash
 pytest tests/integration/test_shapes.py -m integration -v -s
 ```
 
 You should see the agent discover the dataset, write a baseline classifier, train it, and iteratively improve it until accuracy clears 0.85.
+
+### Init flags
+
+```bash
+mle-beast init --check          # diagnose only; don't write any files
+mle-beast init --yes            # accept all defaults; no prompts (CI-friendly)
+mle-beast init --no-validate-key   # skip the live /models verification
+mle-beast init --cwd PATH       # scaffold into PATH instead of cwd
+```
 
 ## How it works
 
@@ -77,12 +116,19 @@ GitSetup → Baseline → [Propose → Implement → Test → Train → Evaluate
 
 ## Choosing a model
 
-```bash
-# Override the default model for any provider
-export MLE_BEAST_MODEL=anthropic/claude-sonnet-4
+`mle-beast init` walks you through this interactively, but the underlying knobs (which init writes to `.env` for you) are:
 
-# Provider priority: LOCAL_LLM_BASE_URL > OPENROUTER_API_KEY > OPENAI_API_KEY
+```bash
+# Pick a model. init writes this based on the live provider catalog.
+export MLE_BEAST_MODEL=deepseek/deepseek-v4-flash
+
+# Pin the provider explicitly when multiple keys are present.
+# Without this pin, the resolution order is:
+#   LOCAL_LLM_BASE_URL > OPENROUTER_API_KEY > OPENAI_API_KEY
+export MLE_BEAST_PROVIDER=openrouter
 ```
+
+**Shell environment variables always win over `.env`** — `.env` only fills in gaps. So if you're testing a one-off model swap, just `MLE_BEAST_MODEL=other/model mle-beast` overrides what's in `.env` for that invocation.
 
 Recommended models (good cost/quality for hill-climbing):
 
@@ -109,12 +155,16 @@ goals:
 
 ## Web dashboard
 
+The dashboard is the default when you run `mle-beast` — it'll open in your browser automatically.
+
 ```bash
-pip install -e ".[web]"
-mle-beast --web
+mle-beast                              # starts dashboard + opens browser
+mle-beast --no-browser                 # starts dashboard, you open the URL yourself
+mle-beast --no-browser --port 9000     # custom port
+mle-beast --no-web                     # drop into the CLI REPL instead
 ```
 
-Then open `http://localhost:8000`. The React frontend shows live run state, hill-climb experiments, token usage, and a DAG view of the pipeline.
+The React frontend shows live run state, hill-climb experiments, per-experiment scores + commit SHAs, token usage, a DAG view of the pipeline, and a **"Show Report"** button that pops a self-contained HTML report (saved to `<workspace>/reports/` for offline sharing or PDF export).
 
 ## Running unit tests
 
