@@ -30,7 +30,11 @@ function RunDetailView({ runId, onBack }) {
   const [feedTab, setFeedTab] = useState("console");
   const [showDetails, setShowDetails] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
-  const [dagExpanded, setDagExpanded] = useState(false);
+  // DAG is expanded by default so the first thing a visitor sees is the
+  // workflow + active stage in context. The user can collapse it by
+  // clicking the stage pill (its chevron flips); there's no separate
+  // "DAG" toggle button anymore.
+  const [dagExpanded, setDagExpanded] = useState(true);
 
   // Tick once a second so the wall-time display counts up live while a
   // run is going. The state change forces re-render; fmtDuration reads
@@ -135,9 +139,8 @@ function RunDetailView({ runId, onBack }) {
         onShowDetails={() => setShowDetails(true)}
       />
 
-      {/* Pipeline — collapsed by default to a single "current stage" chip.
-          Click the toggle to expand the inline DAG panel below without
-          disturbing the rest of the layout. */}
+      {/* Pipeline — DAG expanded by default. Click the stage pill to
+          collapse it down to just the current-stage indicator. */}
       <div style={{ flexShrink: 0, padding: "0 24px" }}>
         <PipelineIndicator
           stageMap={stageMap}

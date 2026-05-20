@@ -72,16 +72,21 @@ function PipelineIndicator({ stageMap, activeStageKey, selectedStage, onSelectSt
     chipStyle = { background: "var(--surface)", border: "1.5px solid var(--border)", color: "var(--text-subtle)" };
   }
 
+  // The pill IS the DAG toggle — click anywhere on it to expand or
+  // collapse the workflow panel below. The chevron at the right edge
+  // signals the affordance (▶ collapsed → rotates to ▼ expanded).
+  // There is no separate "DAG" button; that paradigm got dropped
+  // because the pill already conveys all the same intent.
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, paddingBottom: 12, borderBottom: "1px solid var(--border)" }}>
       <span style={{ fontSize: 8, fontWeight: 700, color: "var(--text-faint)", letterSpacing: "1.5px", fontFamily: "'JetBrains Mono',monospace" }}>STAGE</span>
       <button
         onClick={onToggle}
-        title={expanded ? "Collapse pipeline DAG" : "Expand pipeline DAG"}
+        title={expanded ? "Click to collapse the pipeline DAG" : "Click to expand the pipeline DAG"}
         style={{
           padding: "8px 16px", borderRadius: 8, cursor: "pointer",
           fontSize: 12, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace",
-          display: "flex", alignItems: "center", gap: 8,
+          display: "flex", alignItems: "center", gap: 10,
           ...chipStyle,
         }}
       >
@@ -95,26 +100,15 @@ function PipelineIndicator({ stageMap, activeStageKey, selectedStage, onSelectSt
         )}
         {!isActive && displayState === "pass" && <span style={{ fontSize: 10, color: "rgba(74,222,128,0.7)" }}>✓</span>}
         {!isActive && isFail && <span style={{ fontSize: 10 }}>✗</span>}
-        {displayName.toUpperCase()}
-      </button>
-      <button
-        onClick={onToggle}
-        title={expanded ? "Collapse pipeline DAG" : "Expand pipeline DAG"}
-        style={{
-          background: "transparent", border: "1px solid var(--border)",
-          color: "var(--text-subtle)", fontSize: 11, fontWeight: 700,
-          padding: "4px 10px", borderRadius: 6, cursor: "pointer",
-          fontFamily: "'JetBrains Mono',monospace", letterSpacing: "1px",
-          display: "flex", alignItems: "center", gap: 6,
-        }}
-      >
+        <span>{displayName.toUpperCase()}</span>
         <span style={{
           display: "inline-block",
           transition: "transform 0.18s ease",
           transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
           fontSize: 9,
+          opacity: 0.7,
+          marginLeft: 2,
         }}>▶</span>
-        DAG
       </button>
     </div>
   );
