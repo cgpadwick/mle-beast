@@ -1,11 +1,41 @@
 // Top bar of the run detail page: back, status, run id, active stage,
 // peak score, cancel button.
 
+import { useState } from "react";
+
 import { API } from "../../api.js";
 import { STAGES_ORDER } from "../../constants.js";
 import { StatusPill } from "../../primitives.jsx";
 
 function RunHeader({ run, runId, stageMap, activeStageKey, peak, onBack, onCancel }) {
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportError, setReportError] = useState(null);
+
+  const handleShowReport = async () => {
+    setReportError(null);
+    setReportBusy(true);
+    try {
+      const res = await API.generateReport(runId);
+      if (!res || !res.html) throw new Error("empty response");
+      // Open the returned HTML in a new tab via blob URL. The backend
+      // already persisted a timestamped copy under <workspace>/reports/
+      // so the user can grab the file later regardless of this tab.
+      const blob = new Blob([res.html], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      // Revoke after a delay so the new tab has time to load.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) {
+      setReportError(String(e?.message || e));
+    } finally {
+      setReportBusy(false);
+    }
+  };
+
+  // Reports for in-progress runs are just snapshots — useful sometimes,
+  // but the common case is "wrap up a finished run." Show the button
+  // for any non-running state.
+  const reportable = run.status && run.status !== "running" && run.status !== "pending";
   return (
     // Right padding bumped from 24 → 76 to reserve room for the
     // fixed-position gear button in App.jsx (36px wide at right:16).
@@ -58,6 +88,30 @@ function RunHeader({ run, runId, stageMap, activeStageKey, peak, onBack, onCance
             {peak ? Number(peak.score).toFixed(4) : "—"}
           </span>
         </span>
+        {reportable && (
+          <button
+            onClick={handleShowReport}
+            disabled={reportBusy}
+            title={reportError ? `Last error: ${reportError}` : "Open a self-contained HTML report in a new tab. A timestamped copy is also saved to <workspace>/reports/."}
+            style={{
+              background: reportError ? "rgba(248,113,113,0.10)" : "rgba(129,140,248,0.10)",
+              border: `1px solid ${reportError ? "rgba(248,113,113,0.35)" : "rgba(129,140,248,0.30)"}`,
+              color: reportError ? "#fca5a5" : "#a5b4fc",
+              fontSize: 12, fontWeight: 600,
+              padding: "6px 14px", borderRadius: 8,
+              cursor: reportBusy ? "wait" : "pointer",
+              opacity: reportBusy ? 0.6 : 1,
+              display: "flex", alignItems: "center", gap: 6,
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+              <path d="M3 2.5C3 2.224 3.224 2 3.5 2H10L13 5V13.5C13 13.776 12.776 14 12.5 14H3.5C3.224 14 3 13.776 3 13.5V2.5Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
+              <path d="M10 2V5H13" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
+              <path d="M5.5 8H10.5M5.5 10.5H10.5M5.5 5.5H7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+            </svg>
+            {reportBusy ? "Generating…" : "Show Report"}
+          </button>
+        )}
         {run.status === "running" && (
           <button onClick={() => API.cancelRun(runId).then(onCancel)} style={{
             background: "rgba(248,113,113,0.1)",

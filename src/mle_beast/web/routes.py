@@ -18,6 +18,7 @@ from starlette.responses import StreamingResponse
 from mle_beast.events import PipelineEvent, get_event_bus
 from mle_beast.run_manager import RunConfig, RunInfo, StageInfo, get_run_manager
 from mle_beast.settings import Settings, get_settings, reload_settings, save_settings
+from mle_beast.web.report import render_report
 
 # ---------------------------------------------------------------------------
 # Request/response models
@@ -270,6 +271,63 @@ def register_routes(app: FastAPI) -> None:
             "peak": peak,
             "events": events,
         }
+
+    @app.post("/api/runs/{run_id}/report")
+    async def api_generate_report(run_id: str):
+        """Generate a self-contained HTML report for a run.
+
+        Writes the file to <workspace>/reports/report_<timestamp>.html so
+        the user can download/share it later, and also returns the HTML
+        inline so the frontend can open it directly in a new tab via blob
+        URL without a second round-trip. The timestamped filename means
+        repeated clicks don't overwrite earlier exports.
+
+        Works for any run state (running / completed / failed / cancelled).
+        For an unfinished run the report just reflects the snapshot.
+        """
+        from datetime import datetime as _dt
+
+        manager = get_run_manager()
+        run = manager.get_run(run_id)
+        if not run:
+            raise HTTPException(status_code=404, detail="Run not found")
+        run_dict = RunResponse.from_info(run).model_dump()
+        experiments = manager.list_experiments(run_id)
+        peak = manager.get_peak_score(run_id)
+
+        # Best-effort research log read (may not exist for very early-stage
+        # or pre-baseline failures); the renderer just hides the section.
+        research_log = None
+        try:
+            log_path = Path(run.workspace) / "research_log.md"
+            if log_path.exists():
+                research_log = log_path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+        html = render_report(run_dict, experiments, peak, research_log)
+
+        # Persist to workspace so the user can grab it out-of-band.
+        # Don't fail the request if the workspace is unwritable — return
+        # the HTML anyway so they can at least view it once.
+        saved_path: Optional[str] = None
+        save_error: Optional[str] = None
+        try:
+            workspace = Path(run.workspace).expanduser().resolve()
+            reports_dir = workspace / "reports"
+            reports_dir.mkdir(parents=True, exist_ok=True)
+            ts = _dt.now().strftime("%Y-%m-%d_%H-%M-%S")
+            out_path = reports_dir / f"report_{ts}.html"
+            out_path.write_text(html, encoding="utf-8")
+            saved_path = str(out_path)
+        except Exception as e:
+            save_error = str(e)
+
+        return JSONResponse({
+            "html": html,
+            "saved_path": saved_path,
+            "save_error": save_error,
+        })
 
     @app.get("/api/runs/{run_id}/research-log")
     async def api_get_research_log(run_id: str):
