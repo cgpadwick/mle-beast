@@ -132,12 +132,16 @@ def _render_header(ctx: dict) -> str:
     mode = run.get("mode", "")
     return f"""
 <section class="hero">
+  <div class="hero-eyebrow">mle-beast run report</div>
   <div class="hero-meta">
     <span class="pill pill--{status_class}">{_e(status)}</span>
     <span class="hero-id">{_e(run["id"])}</span>
     <span class="hero-mode">{_e(mode)}</span>
   </div>
-  <h1 class="hero-title">{_e(task)}</h1>
+</section>
+<section class="task-card">
+  <div class="task-label">Task</div>
+  <div class="task-body">{_e(task)}</div>
 </section>
 """
 
@@ -282,6 +286,40 @@ def _build_chart_svg(
         else:
             dots.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="5" class="dot dot--reverted"/>')
 
+    # Annotations: BASELINE pointer on step 0 + step number above each
+    # kept experiment. Reverted dots stay unlabeled so the eye can scan
+    # the kept trajectory without competing text.
+    annotations = []
+    for e in exps:
+        step = e["step"]
+        cx, cy = sx(step), sy(e["score"])
+        is_best = (step == best_step)
+        if step == 0:
+            # BASELINE tag BELOW the dot with a small triangle pointing
+            # up at it. Even if step 0 was reverted (rare; baseline-revert
+            # ends the run), still identify it so the chart self-explains.
+            tri_top = cy + 9
+            tri_base = cy + 13
+            annotations.append(
+                f'<polygon points="{cx - 3.5:.1f},{tri_base:.1f} '
+                f'{cx + 3.5:.1f},{tri_base:.1f} {cx:.1f},{tri_top:.1f}" '
+                f'class="ann-arrow"/>'
+            )
+            annotations.append(
+                f'<text x="{cx:.1f}" y="{tri_base + 12:.1f}" '
+                f'class="ann-label ann-label--baseline" '
+                f'text-anchor="middle">BASELINE</text>'
+            )
+        elif e.get("kept"):
+            cls = "ann-label--best" if is_best else "ann-label--kept"
+            # Star dot is r=9 (extends ~9px above center), kept circle r=6.
+            # Push label out enough that it doesn't kiss the dot.
+            offset = 17 if is_best else 14
+            annotations.append(
+                f'<text x="{cx:.1f}" y="{cy - offset:.1f}" '
+                f'class="ann-label {cls}" text-anchor="middle">{step}</text>'
+            )
+
     # Axis labels
     metric_lbl = f"{metric_name}{' (lower better)' if lower_is_better else ''}"
     y_axis_title = (
@@ -299,6 +337,7 @@ def _build_chart_svg(
         + "".join(grid)
         + path
         + "".join(dots)
+        + "".join(annotations)
         + "".join(ylabels)
         + "".join(xlabels)
         + y_axis_title + x_axis_title
@@ -621,10 +660,18 @@ html, body {
 }
 
 /* ---- hero ---- */
-.hero { margin-bottom: 36px; }
+.hero { margin-bottom: 20px; }
+.hero-eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  margin-bottom: 14px;
+}
 .hero-meta {
   display: flex; align-items: center; gap: 12px;
-  margin-bottom: 18px;
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
 }
@@ -641,12 +688,31 @@ html, body {
   border: 1px solid var(--border);
   border-radius: 4px;
 }
-.hero-title {
-  font-size: 32px;
+
+.task-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 12px;
+  padding: 18px 22px;
+  margin-bottom: 36px;
+  box-shadow: var(--shadow);
+}
+.task-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
   font-weight: 700;
-  line-height: 1.25;
-  margin: 0;
-  letter-spacing: -0.02em;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  margin-bottom: 8px;
+}
+.task-body {
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--fg);
+  font-weight: 400;
+  white-space: pre-wrap;
 }
 
 .pill {
@@ -748,6 +814,21 @@ section { margin-bottom: 40px; }
 .dot--kept     { fill: var(--kept); stroke: #053d2c; stroke-width: 1; }
 .dot--reverted { fill: none; stroke: var(--reverted); stroke-width: 2; }
 .dot--best     { fill: var(--best); stroke: #5a3d0e; stroke-width: 1; }
+
+/* annotations on the chart (baseline pointer + per-kept step numbers) */
+.ann-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+}
+.ann-label--baseline {
+  fill: var(--fg-muted);
+  font-size: 9px;
+  letter-spacing: 1.4px;
+}
+.ann-label--kept { fill: var(--kept); opacity: 0.95; }
+.ann-label--best { fill: var(--best); font-size: 11px; }
+.ann-arrow { fill: var(--fg-faint); }
 
 .chart-legend {
   display: flex; gap: 18px;

@@ -5,11 +5,16 @@ import { useState } from "react";
 
 import { API } from "../../api.js";
 import { STAGES_ORDER } from "../../constants.js";
+import { ReportModal } from "../../modals.jsx";
 import { StatusPill } from "../../primitives.jsx";
 
 function RunHeader({ run, runId, stageMap, activeStageKey, peak, onBack, onCancel }) {
   const [reportBusy, setReportBusy] = useState(false);
   const [reportError, setReportError] = useState(null);
+  // null when modal is closed. Holds the full response when open so the
+  // modal can show the saved-path indicator and offer "open in new tab"
+  // as a fallback for users who want a full-screen view.
+  const [reportData, setReportData] = useState(null);
 
   const handleShowReport = async () => {
     setReportError(null);
@@ -17,14 +22,7 @@ function RunHeader({ run, runId, stageMap, activeStageKey, peak, onBack, onCance
     try {
       const res = await API.generateReport(runId);
       if (!res || !res.html) throw new Error("empty response");
-      // Open the returned HTML in a new tab via blob URL. The backend
-      // already persisted a timestamped copy under <workspace>/reports/
-      // so the user can grab the file later regardless of this tab.
-      const blob = new Blob([res.html], { type: "text/html;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank", "noopener,noreferrer");
-      // Revoke after a delay so the new tab has time to load.
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setReportData(res);
     } catch (e) {
       setReportError(String(e?.message || e));
     } finally {
@@ -37,10 +35,11 @@ function RunHeader({ run, runId, stageMap, activeStageKey, peak, onBack, onCance
   // for any non-running state.
   const reportable = run.status && run.status !== "running" && run.status !== "pending";
   return (
-    // Right padding bumped from 24 → 76 to reserve room for the
-    // fixed-position gear button in App.jsx (36px wide at right:16).
-    // Without this offset the gear visually overlaps Cancel Run /
-    // PEAK in the right cluster.
+    <>
+    {/* Right padding bumped from 24 → 76 to reserve room for the
+        fixed-position gear button in App.jsx (36px wide at right:16).
+        Without this offset the gear visually overlaps Cancel Run /
+        PEAK in the right cluster. */}
     <div style={{
       padding: "9px 76px 9px 24px", borderBottom: "1px solid var(--border)",
       display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -92,7 +91,7 @@ function RunHeader({ run, runId, stageMap, activeStageKey, peak, onBack, onCance
           <button
             onClick={handleShowReport}
             disabled={reportBusy}
-            title={reportError ? `Last error: ${reportError}` : "Open a self-contained HTML report in a new tab. A timestamped copy is also saved to <workspace>/reports/."}
+            title={reportError ? `Last error: ${reportError}` : "Open the run report in a modal. A timestamped HTML copy is also saved to <workspace>/reports/ for offline use."}
             style={{
               background: reportError ? "rgba(248,113,113,0.10)" : "rgba(129,140,248,0.10)",
               border: `1px solid ${reportError ? "rgba(248,113,113,0.35)" : "rgba(129,140,248,0.30)"}`,
@@ -122,6 +121,15 @@ function RunHeader({ run, runId, stageMap, activeStageKey, peak, onBack, onCance
         )}
       </div>
     </div>
+    {reportData && (
+      <ReportModal
+        html={reportData.html}
+        savedPath={reportData.saved_path}
+        saveError={reportData.save_error}
+        onClose={() => setReportData(null)}
+      />
+    )}
+    </>
   );
 }
 

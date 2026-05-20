@@ -92,6 +92,13 @@ def test_render_completed_run_with_hill_climb():
     assert "★ best" in html or "best" in html.lower()
     # Print stylesheet is present so PDFs come out light
     assert "@media print" in html
+    # Chart annotations: baseline arrow+label + step numbers on kept dots
+    assert "BASELINE" in html
+    assert "ann-label--baseline" in html
+    assert "ann-arrow" in html
+    # Kept experiments 2 and 3 should have step-number labels (1 was reverted)
+    assert "ann-label--kept" in html
+    assert "ann-label--best" in html
 
 
 def test_render_failed_run_without_experiments():

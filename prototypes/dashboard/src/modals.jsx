@@ -1,4 +1,4 @@
-// Modal dialogs: run details + event details.
+// Modal dialogs: run details + event details + report.
 
 import { useEffect } from "react";
 
@@ -228,7 +228,128 @@ function EventDetailsModal({ event, runStart, onClose }) {
 
 
 // ---------------------------------------------------------------------
+// Report modal — embeds the self-contained HTML report in an iframe so
+// the report's own CSS doesn't leak into the dashboard (and vice versa).
+// The backend already saved a timestamped copy to <workspace>/reports/;
+// this modal just surfaces the same HTML for in-dashboard viewing.
+// ---------------------------------------------------------------------
+
+function ReportModal({ html, savedPath, saveError, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const handleOpenInTab = () => {
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank", "noopener,noreferrer");
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0,
+      background: "rgba(0,0,0,0.6)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      zIndex: 1000, padding: 20, backdropFilter: "blur(4px)",
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: "var(--bg-elevated)", border: "1px solid var(--border)",
+        borderRadius: 14,
+        width: "min(1180px, 96vw)",
+        height: "min(94vh, 1000px)",
+        display: "flex", flexDirection: "column",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
+        overflow: "hidden",
+      }}>
+        {/* Header */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "12px 18px",
+          borderBottom: "1px solid var(--border)",
+          flexShrink: 0, gap: 12,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, flex: 1 }}>
+            <span style={{ fontSize: 14, fontWeight: 700, flexShrink: 0 }}>Run Report</span>
+            {savedPath && (
+              <span
+                title={savedPath}
+                style={{
+                  fontSize: 10, color: "var(--text-faint)",
+                  fontFamily: "'JetBrains Mono',monospace",
+                  letterSpacing: "0.3px",
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  flex: 1, minWidth: 0,
+                }}
+              >
+                saved → {savedPath}
+              </span>
+            )}
+            {saveError && (
+              <span
+                title={saveError}
+                style={{
+                  fontSize: 10, color: "#fca5a5",
+                  fontFamily: "'JetBrains Mono',monospace",
+                }}
+              >
+                save failed: {saveError.slice(0, 60)}
+              </span>
+            )}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <button
+              onClick={handleOpenInTab}
+              title="Open report in a new browser tab (full screen)"
+              style={{
+                background: "rgba(129,140,248,0.10)",
+                border: "1px solid rgba(129,140,248,0.30)",
+                color: "#a5b4fc",
+                fontSize: 11, fontWeight: 600,
+                padding: "5px 10px", borderRadius: 6,
+                cursor: "pointer",
+                fontFamily: "'JetBrains Mono',monospace",
+                letterSpacing: "0.3px",
+              }}
+            >
+              open in tab ↗
+            </button>
+            <button
+              onClick={onClose}
+              title="Close (Esc)"
+              style={{
+                background: "transparent", border: "1px solid var(--border)",
+                color: "var(--text-muted)", fontSize: 14, width: 30, height: 30,
+                borderRadius: 8, cursor: "pointer", display: "flex",
+                alignItems: "center", justifyContent: "center",
+              }}
+            >×</button>
+          </div>
+        </div>
+
+        {/* Iframe — isolated CSS context so the report's body styles
+            don't leak into the dashboard. No allow-scripts because the
+            report is pure HTML+SVG+CSS with no JS. */}
+        <iframe
+          srcDoc={html}
+          title="Run report"
+          sandbox="allow-popups allow-popups-to-escape-sandbox allow-modals allow-same-origin"
+          style={{
+            flex: 1, border: 0,
+            background: "#0d0e10",
+            width: "100%",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+
+// ---------------------------------------------------------------------
 // Run detail view (the main visualization, with real data)
 // ---------------------------------------------------------------------
 
-export { DetailsModal, EventDetailsModal };
+export { DetailsModal, EventDetailsModal, ReportModal };
