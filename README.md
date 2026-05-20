@@ -26,6 +26,13 @@ Both modes share the same hill-climbing engine: propose → implement → test �
 
 ## Install
 
+Prerequisites for greenfield runs (mle-beast builds the workspace venv for you):
+
+- **git** — clones the [ml-frameworks](https://github.com/cgpadwick/ml-frameworks) stack into each new workspace
+- **poetry** — installs the pinned ml-frameworks dependency lock into the workspace venv. Install with `pipx install poetry` or `curl -sSL https://install.python-poetry.org | python3 -`
+
+(Brownfield / BYO-environment runs skip both — you bring your own venv.)
+
 ```bash
 pip install -e .
 

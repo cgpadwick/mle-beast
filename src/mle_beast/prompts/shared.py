@@ -14,8 +14,9 @@ INSTALLING ADDITIONAL PACKAGES:
 The workspace's venv has the ml-frameworks BASE stack: torch + torchvision
 + torchaudio + numpy + scipy + pandas + scikit-learn + matplotlib + seaborn
 + pytest. If you need a package NOT in base (e.g. transformers, ultralytics,
-pytorch-lightning), prefer:
-    cd <workspace_root> && poetry install --no-root -E <group>
+pytorch-lightning), prefer (via run_shell_command, which already cd's to
+the workspace root):
+    poetry install --no-root -E <group>
 over a raw `pip install <pkg>`. The available groups are defined in
 pyproject.toml at the workspace root under [tool.poetry.extras] —
 common ones: nlp (transformers, datasets, peft, accelerate), training
