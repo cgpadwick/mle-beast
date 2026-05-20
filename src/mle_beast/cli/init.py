@@ -310,9 +310,13 @@ def _prompt_for_key(spec: ProviderSpec, *, yes: bool) -> Optional[str]:
             return existing
         if yes:
             return None
+        # /v1 included by convention — llm.py treats LOCAL_LLM_BASE_URL
+        # as an OpenAI-compatible base URL, and the OpenAI SDK appends
+        # endpoints onto it directly. Without /v1 the runtime requests
+        # would 404 against vLLM / Ollama / llama.cpp servers.
         return _ask(
             f"{spec.label} base URL",
-            default="http://localhost:8000",
+            default="http://localhost:8000/v1",
         )
 
     existing = os.environ.get(spec.key_env, "")
@@ -332,8 +336,16 @@ def _fetch_models(spec: ProviderSpec, secret: str) -> Optional[list[str]]:
     a list of slugs on success, None on any failure (network, auth,
     timeout). Callers decide whether to soft-warn or hard-fail."""
     if spec.name == "local":
+        # `LOCAL_LLM_BASE_URL` is treated by the rest of the codebase
+        # (llm.py) as an OpenAI-compatible base URL, which by
+        # convention ALREADY includes `/v1`. Be lenient here: accept
+        # `http://host:8000` OR `http://host:8000/v1` and produce a
+        # well-formed `/v1/models` either way.
         base = secret.rstrip("/")
-        url = f"{base}/v1/models"
+        if base.endswith("/v1"):
+            url = f"{base}/models"
+        else:
+            url = f"{base}/v1/models"
         headers: dict[str, str] = {}
     else:
         url = spec.models_url
@@ -416,9 +428,14 @@ def _pick_model(
     if slug is None:
         return None
 
-    # Validate (and maybe auto-correct format mismatches).
+    # Validate (and maybe auto-correct format mismatches). If the
+    # validator returns None, the user explicitly declined both the
+    # correction AND saving the original — respect that decision and
+    # return None up the chain instead of silently keeping the bad
+    # slug (which would otherwise land in .env and confuse the next run).
     if validate and available_slugs is not None:
-        slug = _validate_or_correct(slug, spec, available_slugs, yes=yes) or slug
+        corrected = _validate_or_correct(slug, spec, available_slugs, yes=yes)
+        return corrected
 
     return slug
 
@@ -488,9 +505,11 @@ class ProjectChoices:
 def _write_env_file(cwd: Path, choices: ProjectChoices) -> Path:
     """Write `.env` based on the user's choices. Returns the path written.
 
-    Idempotent in spirit — we always overwrite our own keys but preserve
-    any unrelated lines the user may have added. Lines we manage carry
-    a `# mle-beast` comment marker so it's clear which we own.
+    Idempotent in spirit — we overwrite our managed keys
+    (`MLE_BEAST_PROVIDER`, `MLE_BEAST_MODEL`, and the chosen provider's
+    `*_API_KEY` / `*_BASE_URL`) and preserve every other line the user
+    may have added. No special marker is appended to lines — the key
+    names themselves are how we identify what's ours on re-runs.
     """
     env_path = cwd / ".env"
     existing_lines: list[str] = []
@@ -594,6 +613,11 @@ def run_init(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     cwd = Path(args.cwd).expanduser().resolve() if args.cwd else Path.cwd()
+    # Create the target if --cwd points at a not-yet-existing path so
+    # subsequent .env / AGENTS.md writes don't FileNotFoundError mid-run.
+    # When cwd defaults to Path.cwd() the dir obviously exists; mkdir
+    # is idempotent (exist_ok=True) either way.
+    cwd.mkdir(parents=True, exist_ok=True)
 
     print(_bold("mle-beast init"))
     print(_dim(f"  target dir: {cwd}"))

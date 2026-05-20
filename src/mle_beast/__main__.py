@@ -60,7 +60,12 @@ def _load_dotenv_early() -> None:
             os.environ[key] = value
 
 
-_load_dotenv_early()
+# NOTE: _load_dotenv_early() used to run here at module load time, but
+# that polluted `mle-beast init`'s shell-detection logic — init's whole
+# job is to write .env, so it must NOT read one first (otherwise vars
+# sourced from .env look indistinguishable from shell-exported ones,
+# and we'd skip writing keys the user actually wanted persisted). The
+# call now happens inside main() AFTER subcommand dispatch.
 
 
 def _open_browser_when_ready(url: str, *, wait_seconds: float = 1.0) -> None:
@@ -88,9 +93,16 @@ def main() -> None:
     # Subcommand dispatch BEFORE the main argparse setup. Keeps backward
     # compatibility (no args → dashboard) while letting us grow new
     # subcommands without disturbing the existing flag set.
+    #
+    # Critical ordering: `init` runs WITHOUT loading .env first. Its
+    # whole job is to set up .env, so reading from one would pollute
+    # the shell-vs-.env detection logic. All other subcommands (and
+    # the no-subcommand dashboard default) load .env as expected.
     if len(sys.argv) > 1 and sys.argv[1] == "init":
         from mle_beast.cli.init import run_init
         sys.exit(run_init(sys.argv[2:]))
+
+    _load_dotenv_early()
 
     parser = argparse.ArgumentParser(
         prog="mle-beast",
