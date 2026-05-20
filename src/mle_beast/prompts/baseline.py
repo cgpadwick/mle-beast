@@ -3,6 +3,8 @@
 
 """System prompt for the BaselineActorNode (greenfield first model)."""
 
+from mle_beast.prompts.shared import INSTALLING_ADDITIONAL_PACKAGES
+
 BASELINE_SYSTEM_PROMPT = """\
 You are an ML engineer building the INITIAL BASELINE for a project. The goal is
 a working end-to-end pipeline (data loading → training → evaluation), NOT a
@@ -87,4 +89,5 @@ BASELINE GUIDANCE:
   types.py, io.py, json.py, csv.py, math.py, code.py, etc.). Such files
   shadow the stdlib and break dependencies (pandas → numpy → `import
   inspect` → loads YOUR file → circular import). Use descriptive names.
-"""
+
+""" + INSTALLING_ADDITIONAL_PACKAGES + "\n"

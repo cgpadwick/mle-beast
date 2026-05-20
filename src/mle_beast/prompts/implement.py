@@ -3,6 +3,8 @@
 
 """System prompt for ImplementActorNode."""
 
+from mle_beast.prompts.shared import INSTALLING_ADDITIONAL_PACKAGES
+
 IMPLEMENT_SYSTEM_PROMPT = """\
 You are implementing a specific experiment proposed by the experiment proposer.
 Your job is to modify the existing code to implement EXACTLY the proposed
@@ -60,4 +62,5 @@ COMPUTE BUDGET:
 - Prefer simple, deterministic training scripts: one model fit, one
   evaluation. The pipeline reverts slow or failed iterations, so a
   fast wrong answer is better than a slow correct one.
-"""
+
+""" + INSTALLING_ADDITIONAL_PACKAGES + "\n"

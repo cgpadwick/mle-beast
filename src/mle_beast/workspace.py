@@ -292,9 +292,6 @@ class WorkspaceCreator:
             shutil.rmtree(dest_dir)
         dest_dir.parent.mkdir(parents=True, exist_ok=True)
 
-        if not check_command_exists("git"):
-            raise RuntimeError("git is required but not found on PATH.")
-
         res = self._run(
             ["git", "clone", "--depth", "1", "--branch", "master",
              ML_FRAMEWORKS_REPO, str(dest_dir)],
@@ -304,10 +301,29 @@ class WorkspaceCreator:
             raise RuntimeError(f"git clone failed: {res.stderr or res.stdout}")
         return dest_dir
 
-    def _install_stack_to_venv(self) -> None:
+    def _check_prereqs(self) -> None:
+        # Run BEFORE the ml-frameworks clone so the user doesn't wait
+        # through a several-hundred-MB git fetch only to be told
+        # poetry isn't installed. Mirrors the up-front probe that
+        # check_workspace_env does for brownfield runs.
+        if not check_command_exists("git"):
+            raise RuntimeError(
+                "git is required but not found on PATH.\n"
+                "Install git from https://git-scm.com/downloads (or your "
+                "system package manager) and re-run."
+            )
         if not check_command_exists("poetry"):
-            raise RuntimeError("poetry is required but not found on PATH.")
+            raise RuntimeError(
+                "poetry is required but not found on PATH.\n"
+                "mle-beast uses poetry to install ml-frameworks's pinned "
+                "stack into the workspace venv. Install it with ONE of:\n"
+                "  pipx install poetry\n"
+                "  curl -sSL https://install.python-poetry.org | python3 -\n"
+                "See https://python-poetry.org/docs/#installation for "
+                "the official install guide, then re-run."
+            )
 
+    def _install_stack_to_venv(self) -> None:
         poetry_env = {**os.environ}
         for key in ["VIRTUAL_ENV", "POETRY_ACTIVE", "POETRY_ENV", "PYTHONHOME", "PYTHONPATH"]:
             poetry_env.pop(key, None)
@@ -331,20 +347,42 @@ class WorkspaceCreator:
             capture_output=False,
         )
 
-        # ml-frameworks base now ships scikit-learn, matplotlib, seaborn,
-        # joblib, requests, rich. So `-E data` (just dask/polars/pyarrow now)
-        # and the old kitchen-sink `-E viz` are no longer needed for sklearn
-        # or matplotlib/seaborn. Keep `-E viz` (plotly) for richer EDA;
-        # drop `-E data` and `-E viz-app` (bokeh/streamlit/dash/gradio/
-        # jupyter/ipython) which the actor doesn't use.
-        self._run(
-            ["poetry", "install", "--no-root", "-E", "ml", "-E", "vision",
-             "-E", "nlp", "-E", "vision-extra", "-E", "viz"],
-            description=f"Installing stack into venv at {self.root}",
+        # Base-only install. ml-frameworks's base ships everything most
+        # tasks need: torch + torchvision + torchaudio + numpy + scipy
+        # + pandas + scikit-learn + joblib + matplotlib + seaborn +
+        # pytest. Total ~5.5 GB. If the agent's code needs anything else
+        # (e.g. transformers for NLP, ultralytics for YOLO) it adds the
+        # appropriate group at run time via `poetry install --no-root
+        # -E <group>` against the pyproject.toml we leave at workspace
+        # root. The available groups are defined under
+        # [tool.poetry.extras] there and the actor system prompts are
+        # nudged to prefer that over `pip install <pkg>` (poetry uses
+        # the lock file ml-frameworks has already validated). Old
+        # kitchen-sink install (-E ml -E vision -E nlp -E vision-extra
+        # -E viz, ~8 GB) was removed when ml-frameworks reorganized:
+        # the `ml` group no longer exists and lots of what was in it
+        # is in base now anyway.
+        res = self._run(
+            ["poetry", "install", "--no-root"],
+            description=f"Installing ml-frameworks BASE into venv at {self.root}",
             cwd=str(self.root),
             env=poetry_env,
             capture_output=False,
         )
+        if res.returncode != 0:
+            # capture_output=False so stdout/stderr already streamed to the
+            # console + per-run log tee; don't try to re-emit them here.
+            # `poetry env use` ran earlier (line above) so .venv likely
+            # exists but is missing deps — without this fail-fast, the
+            # next "venv exists" check passes and the agent silently runs
+            # against a broken environment until the first import error.
+            raise RuntimeError(
+                f"`poetry install` failed (exit {res.returncode}). "
+                f"See stdout/stderr above for the underlying error "
+                f"(common causes: network failure mid-download, disk "
+                f"full, lock-file conflict against the installed "
+                f"Python version)."
+            )
 
         venv_dir = Path(self.root) / ".venv"
         if not venv_dir.exists():
@@ -398,6 +436,8 @@ class WorkspaceCreator:
         return (res.stdout or "").strip()
 
     def run(self) -> None:
+        self._check_prereqs()
+
         mlframeworks_dir = Path(self.root) / "ml-frameworks-venv"
         self._clone_ml_frameworks(mlframeworks_dir)
 
