@@ -66,43 +66,57 @@ def _build_context(
     verdict = _parse_json(run.get("verdict_json")) or {}
     findings = verdict.get("findings") or {}
 
-    # Sort once + compute rolling best for the Δ column
     exps = sorted(experiments, key=lambda x: x["step"])
-    rolling_best: Optional[float] = None
-    best_step: Optional[int] = None
+
+    # BEST = kept-only winner. Prefer the caller-supplied `peak`
+    # (RunManager.get_peak_score → matches the dashboard's PEAK pill).
+    # Fall back to a kept-only recompute when peak is None (very early
+    # in a run before the first kept score lands).
+    if peak is not None and peak.get("score") is not None:
+        best_score: Optional[float] = peak["score"]
+        best_step: Optional[int] = peak.get("step")
+    else:
+        kept_scored = [e for e in exps if e.get("kept") and e.get("score") is not None]
+        if kept_scored:
+            picker = min if lower_is_better else max
+            best = picker(kept_scored, key=lambda e: e["score"])
+            best_score = best["score"]
+            best_step = best["step"]
+        else:
+            best_score = None
+            best_step = None
+
+    # Rolling-best Δ column. Tracks the running best of KEPT experiments
+    # only — a reverted experiment never lands on the branch, so it
+    # can't be the best-so-far even if its raw score is highest.
+    # Reverted rows still get a delta computed against the prior kept
+    # best (useful context — explains why they were reverted).
+    rolling_kept_best: Optional[float] = None
     annotated: list[dict] = []
     for e in exps:
         score = e.get("score")
         delta = None
         if score is not None:
-            if rolling_best is None:
-                delta = 0.0
-                rolling_best = score
-                best_step = e["step"]
-            else:
-                delta = score - rolling_best
-                if lower_is_better:
-                    if score < rolling_best:
-                        rolling_best = score
-                        best_step = e["step"]
+            delta = 0.0 if rolling_kept_best is None else score - rolling_kept_best
+            if e.get("kept"):
+                if rolling_kept_best is None:
+                    rolling_kept_best = score
+                elif lower_is_better:
+                    rolling_kept_best = min(rolling_kept_best, score)
                 else:
-                    if score > rolling_best:
-                        rolling_best = score
-                        best_step = e["step"]
+                    rolling_kept_best = max(rolling_kept_best, score)
         annotated.append({**e, "delta_vs_prev_best": delta})
 
     runtime_s = None
     if run.get("started_at") and run.get("completed_at"):
         runtime_s = run["completed_at"] - run["started_at"]
-    elif run.get("started_at"):
-        runtime_s = None  # ongoing — caller decides what to show
 
     return {
         "run": run,
         "experiments": annotated,
         "peak": peak,
         "best_step": best_step,
-        "best_score": rolling_best,
+        "best_score": best_score,
         "metric_name": metric_name,
         "lower_is_better": lower_is_better,
         "verdict": verdict,
@@ -539,10 +553,13 @@ def _mini_markdown(md: str) -> str:
 
     md = _CODE_FENCE_RE.sub(_stash, md)
     md = _e(md)
-    # Headings
-    md = _HEADING_RE.sub(
-        lambda m: f'<h{len(m.group(1)) + 2}>{m.group(2)}</h{len(m.group(1)) + 2}>', md
-    )
+    # Headings: shift markdown level by +2 so they nest under the
+    # report's existing h1/h2, but clamp to h6 (HTML's max).
+    # `###### Foo` (md h6) → `<h6>Foo</h6>` not `<h8>Foo</h8>`.
+    def _heading(m: re.Match) -> str:
+        level = min(6, len(m.group(1)) + 2)
+        return f'<h{level}>{m.group(2)}</h{level}>'
+    md = _HEADING_RE.sub(_heading, md)
     # Bullets → wrap consecutive bullet lines in <ul>
     lines = md.split("\n")
     out: list[str] = []
@@ -613,7 +630,16 @@ _PAGE_TEMPLATE = """<!doctype html>
 # paper-friendly palette + tweaks gridlines/dots so a Cmd-P / save-as-PDF
 # always produces something readable on white paper.
 _STYLES = """
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+/* System font stacks only. Keeps the file genuinely self-contained:
+   drop the HTML on an air-gapped box (or open as a saved-PDF source)
+   and the typography still works without any remote font fetch.
+   SF Pro / Segoe UI / Roboto are fine substitutes for any branded
+   webfont we might want to ship — and changing them only requires
+   editing the two CSS variables below. */
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
 
 :root {
   --bg: #0d0e10;
@@ -647,7 +673,7 @@ html, body {
   margin: 0; padding: 0;
   background: var(--bg);
   color: var(--fg);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -662,7 +688,7 @@ html, body {
 /* ---- hero ---- */
 .hero { margin-bottom: 20px; }
 .hero-eyebrow {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 2.5px;
@@ -672,7 +698,7 @@ html, body {
 }
 .hero-meta {
   display: flex; align-items: center; gap: 12px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 .hero-id {
@@ -699,7 +725,7 @@ html, body {
   box-shadow: var(--shadow);
 }
 .task-label {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 1.8px;
@@ -716,7 +742,7 @@ html, body {
 }
 
 .pill {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -748,7 +774,7 @@ html, body {
   border-color: rgba(245,158,11,0.30);
 }
 .stat-label {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 1.5px;
@@ -756,7 +782,7 @@ html, body {
   margin-bottom: 6px;
 }
 .stat-value {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 26px;
   font-weight: 700;
   color: var(--fg);
@@ -792,12 +818,12 @@ section { margin-bottom: 40px; }
 .chart-svg { width: 100%; height: auto; display: block; }
 .grid { stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 4; }
 .axis-label {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   fill: var(--fg-faint);
 }
 .axis-title {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 600;
   fill: var(--fg-muted);
@@ -817,7 +843,7 @@ section { margin-bottom: 40px; }
 
 /* annotations on the chart (baseline pointer + per-kept step numbers) */
 .ann-label {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
 }
@@ -836,7 +862,7 @@ section { margin-bottom: 40px; }
   color: var(--fg-muted);
   margin-top: 12px;
   padding-left: 4px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 .lg {
   display: inline-block;
@@ -864,7 +890,7 @@ section { margin-bottom: 40px; }
 }
 .exp-table thead th {
   text-align: left;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 1.5px;
@@ -884,7 +910,7 @@ section { margin-bottom: 40px; }
 .exp-table .row--best { background: var(--best-bg); }
 .exp-table .row--best:hover { background: rgba(245,158,11,0.20); }
 .exp-table .num {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   white-space: nowrap;
 }
 .exp-table .score { font-weight: 700; }
@@ -893,9 +919,9 @@ section { margin-bottom: 40px; }
   color: var(--fg);
   line-height: 1.45;
 }
-.exp-table .mono { font-family: 'JetBrains Mono', monospace; }
+.exp-table .mono { font-family: var(--font-mono); }
 .exp-table .ts {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--fg-faint);
   white-space: nowrap;
@@ -909,7 +935,7 @@ section { margin-bottom: 40px; }
 }
 .badge {
   display: inline-block;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 1px;
@@ -934,7 +960,7 @@ section { margin-bottom: 40px; }
 .research-log summary {
   cursor: pointer;
   padding: 18px 24px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.5px;
@@ -958,7 +984,7 @@ section { margin-bottom: 40px; }
   background: var(--bg-elevated);
   padding: 2px 6px;
   border-radius: 4px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--accent);
 }
@@ -968,7 +994,7 @@ section { margin-bottom: 40px; }
   padding: 14px 16px;
   border-radius: 8px;
   overflow-x: auto;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -982,7 +1008,7 @@ section { margin-bottom: 40px; }
   margin-bottom: 16px;
 }
 .error-label {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 2px;
@@ -1014,7 +1040,7 @@ section { margin-bottom: 40px; }
 }
 .cfg-row:last-child { border-bottom: none; }
 .cfg-k {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.5px;
@@ -1026,7 +1052,7 @@ section { margin-bottom: 40px; }
   color: var(--fg);
   word-break: break-all;
   text-align: right;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 
@@ -1044,7 +1070,7 @@ section { margin-bottom: 40px; }
   margin-top: 60px;
   padding-top: 24px;
   border-top: 1px solid var(--border);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 1.5px;
   text-transform: uppercase;

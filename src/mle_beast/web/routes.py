@@ -276,14 +276,18 @@ def register_routes(app: FastAPI) -> None:
     async def api_generate_report(run_id: str):
         """Generate a self-contained HTML report for a run.
 
-        Writes the file to <workspace>/reports/report_<timestamp>.html so
-        the user can download/share it later, and also returns the HTML
-        inline so the frontend can open it directly in a new tab via blob
-        URL without a second round-trip. The timestamped filename means
-        repeated clicks don't overwrite earlier exports.
+        Persists a timestamped copy to <workspace>/reports/report_<ts>.html
+        so the user can grab the file out-of-band (Slack, email, PDF
+        export) AND returns the same HTML inline in the response so the
+        frontend can show it without a second round-trip. The dashboard
+        currently renders the inline HTML in a sandboxed iframe modal
+        (ReportModal) with an "open in tab" fallback; this endpoint is
+        UX-agnostic and just returns {html, saved_path, save_error}.
+        The timestamped filename means repeated clicks don't overwrite.
 
-        Works for any run state (running / completed / failed / cancelled).
-        For an unfinished run the report just reflects the snapshot.
+        Works for any non-running run (the button is hidden for running
+        / pending states in the dashboard, but a CLI caller can still
+        hit this endpoint for a snapshot of an in-progress run).
         """
         from datetime import datetime as _dt
 

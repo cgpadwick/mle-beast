@@ -11,9 +11,10 @@ import { StatusPill } from "../../primitives.jsx";
 function RunHeader({ run, runId, stageMap, activeStageKey, peak, onBack, onCancel }) {
   const [reportBusy, setReportBusy] = useState(false);
   const [reportError, setReportError] = useState(null);
-  // null when modal is closed. Holds the full response when open so the
-  // modal can show the saved-path indicator and offer "open in new tab"
-  // as a fallback for users who want a full-screen view.
+  // null when modal is closed. Holds the {html, saved_path, save_error}
+  // response when open so ReportModal can render the report in a
+  // sandboxed iframe, show the on-disk save path, and offer an
+  // "open in tab ↗" fallback for users who want full screen.
   const [reportData, setReportData] = useState(null);
 
   const handleShowReport = async () => {

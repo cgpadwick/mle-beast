@@ -138,6 +138,73 @@ def test_render_lower_is_better_run():
     assert "not reached" in html
 
 
+def test_best_score_ignores_reverted_experiments():
+    """Reverted experiments never landed on the branch — even if a
+    reverted score is numerically the highest, BEST should reflect the
+    best KEPT score. Regression test against Copilot review on PR #14
+    (https://github.com/cgpadwick/mle-beast/pull/14)."""
+    run = _base_run()
+    # Step 1 was reverted but had the highest score (0.95). It doesn't
+    # count — the best kept score is step 3 at 0.78.
+    experiments = [
+        _exp(0, 0.70, True, "Baseline"),
+        _exp(1, 0.95, False, "Tried bigger model — overfit, reverted"),
+        _exp(2, 0.74, True, "Added regularization"),
+        _exp(3, 0.78, True, "Cosine LR"),
+    ]
+    # The BEST card markup is `<div class="stat stat--highlight">…</div>`
+    # — grab just that card (not the CSS rule of the same name) to
+    # check what the headline number actually is.
+    def _best_card(html_text: str) -> str:
+        marker = '<div class="stat stat--highlight">'
+        start = html_text.index(marker)
+        end = html_text.index("</div>", html_text.index("</div>", start) + 1) + len("</div>")
+        return html_text[start:end]
+
+    # With peak passed in (kept-only winner — what RunManager produces)
+    html = render_report(
+        run, experiments, peak={"step": 3, "score": 0.78, "lower_is_better": False, "kept_count": 3}
+    )
+    best_card = _best_card(html)
+    assert "0.7800" in best_card
+    assert "0.9500" not in best_card
+
+    # And with peak=None (early-run fallback path), the kept-only
+    # recompute should also do the right thing.
+    html2 = render_report(run, experiments, peak=None)
+    # The high reverted score still appears in the experiments table
+    # (it's a data point), but not as the headline BEST.
+    assert "0.9500" in html2
+    best_card2 = _best_card(html2)
+    assert "0.7800" in best_card2
+    assert "0.9500" not in best_card2
+
+
+def test_mini_markdown_clamps_heading_level_to_h6():
+    """Markdown ###### should render as <h6>, not <h8>. Regression
+    test against Copilot review on PR #14."""
+    run = _base_run()
+    md = "###### Deeply nested heading\n\nbody text\n"
+    html = render_report(run, [_exp(0, 0.7, True, "Baseline")], peak=None, research_log_md=md)
+    assert "<h6>Deeply nested heading</h6>" in html
+    assert "<h7" not in html
+    assert "<h8" not in html
+
+
+def test_report_has_no_external_network_dependencies():
+    """The report claims to be self-contained. No CDN imports, no
+    Google Fonts, no remote stylesheets. Regression test against
+    Copilot review on PR #14."""
+    run = _base_run()
+    html = render_report(run, [_exp(0, 0.7, True, "Baseline")], peak=None)
+    # No @import or <link rel=stylesheet> pulling from the network
+    assert "@import" not in html
+    assert "fonts.googleapis.com" not in html
+    assert 'rel="stylesheet"' not in html
+    # No <script src> either
+    assert "<script src" not in html
+
+
 def test_render_with_research_log_markdown():
     run = _base_run()
     experiments = [_exp(0, 0.7, True, "Baseline")]
