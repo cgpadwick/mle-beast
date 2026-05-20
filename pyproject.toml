@@ -25,6 +25,11 @@ dependencies = [
     "pydantic>=2.5",
     "pyyaml>=6.0",
     "pytest>=8.0",
+    # python-dotenv is loaded best-effort in __main__.py; we soft-fallback
+    # to a stdlib parser if it's missing, but ship it as a dep so the
+    # typical install path gets robust .env parsing (export prefixes,
+    # quoting, interpolation).
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]
@@ -60,6 +65,9 @@ where = ["src"]
 # is skipped at runtime and the user can either rebuild or run with
 # --no-web.
 "mle_beast.web" = ["static/**/*"]
+# Ship the AGENTS.md template (and any future templates) inside the
+# wheel so `mle-beast init` can copy them from `importlib.resources`.
+"mle_beast.templates" = ["*.md", "*.txt", "*.yaml"]
 
 [tool.pytest.ini_options]
 markers = [

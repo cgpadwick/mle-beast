@@ -18,10 +18,49 @@ Backwards compat: --web is accepted (and ignored — it's now the default).
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import threading
 import time
 import webbrowser
+from pathlib import Path
+
+
+def _load_dotenv_early() -> None:
+    """Load `<cwd>/.env` BEFORE any mle-beast module that reads env vars
+    (notably mle_beast.llm, which detects the provider at import time).
+
+    Uses python-dotenv if installed; falls back to a tiny inline parser
+    otherwise so this never becomes a hard dependency for users who set
+    everything in their shell env. `override=False` semantics: shell-
+    exported variables always win, .env only fills in the gaps.
+    """
+    env_path = Path.cwd() / ".env"
+    if not env_path.exists():
+        return
+    try:
+        from dotenv import load_dotenv  # type: ignore
+        load_dotenv(env_path, override=False)
+        return
+    except ImportError:
+        pass
+    # Stdlib fallback. Bare KEY=VALUE only; strips outer quotes. Skips
+    # comments and blank lines. Not as robust as python-dotenv (no
+    # interpolation, no export prefix) but good enough that the user
+    # gets `.env` support even on an install that didn't pick up the
+    # python-dotenv dep yet.
+    for line in env_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        s = line.strip()
+        if not s or s.startswith("#") or "=" not in s:
+            continue
+        key, _, value = s.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_dotenv_early()
 
 
 def _open_browser_when_ready(url: str, *, wait_seconds: float = 1.0) -> None:
@@ -46,6 +85,13 @@ def _open_browser_when_ready(url: str, *, wait_seconds: float = 1.0) -> None:
 
 
 def main() -> None:
+    # Subcommand dispatch BEFORE the main argparse setup. Keeps backward
+    # compatibility (no args → dashboard) while letting us grow new
+    # subcommands without disturbing the existing flag set.
+    if len(sys.argv) > 1 and sys.argv[1] == "init":
+        from mle_beast.cli.init import run_init
+        sys.exit(run_init(sys.argv[2:]))
+
     parser = argparse.ArgumentParser(
         prog="mle-beast",
         description="MLE-Beast — LLM-driven ML engineering agent",
