@@ -189,6 +189,21 @@ def test_destructive_op_with_absolute_workspace_path_allowed(tmp_path):
     assert decision.allow
 
 
+def test_workspace_path_is_normalized_before_containment(tmp_path):
+    """The workspace arg may come in non-normalized (containing `..`
+    or symlinks). Both `workspace` and the resolved `child` must be
+    normalized to the same form so a path that's truly inside doesn't
+    false-positive as outside. Regression for Copilot review on PR #17."""
+    # Build a non-canonical workspace path via `..` traversal that
+    # still resolves to tmp_path.
+    bogus_workspace = tmp_path / "sub" / ".." / "sub" / ".."  # → tmp_path
+    decision = check_shell_command(
+        "rm -rf checkpoints/old",
+        workspace=bogus_workspace,
+    )
+    assert decision.allow, decision.reason
+
+
 # ----------------------------------------------------------------
 # Python file text linting
 # ----------------------------------------------------------------

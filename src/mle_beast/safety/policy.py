@@ -3,8 +3,9 @@
 
 """Load + enforce the static safety policy.
 
-The policy file (`safety/policy.json`) is loaded once at module import.
-Two public entry points:
+The policy file (`safety/policy.json`) is loaded lazily on the first
+call to `get_policy()` and cached for subsequent checks. Two public
+entry points:
 
   - `check_shell_command(cmd: str) -> SafetyDecision`
   - `check_python_file_text(text: str) -> SafetyDecision`
@@ -23,8 +24,11 @@ policy file.
 Design notes:
   - Token check uses word boundaries (`\\bsudo\\b`) to avoid false
     positives on names that contain "sudo" as a substring.
-  - Pattern check uses re.IGNORECASE because shells are case-insensitive
-    on the relevant verbs (rm, etc.) on most platforms.
+  - Pattern check uses re.IGNORECASE defensively against odd model
+    output casing (`RM`, `Sudo`, etc.). POSIX shells are themselves
+    case-sensitive — these miscased forms wouldn't actually run —
+    but the agent shouldn't be emitting them at all, and the regex
+    is cheap to make case-insensitive.
   - Path-containment only fires when the command shape looks
     destructive (rm/mv/cp/chmod/chown/tee/redirect). Read-only
     commands like `cat /etc/foo` are NOT blocked — the agent
@@ -223,6 +227,13 @@ def check_shell_command(command: str, workspace: Optional[Path] = None) -> Safet
         # don't, skip — early-setup code may legitimately run before
         # the workspace is registered.
         if workspace is not None:
+            # Normalize workspace to the same form `_resolve_for_check`
+            # produces so symlinked paths, embedded `..`, or relative
+            # cwds compare like-for-like. Without this, a workspace
+            # passed in as e.g. `/tmp/run/../run` would never match
+            # any resolved child and every destructive op would
+            # false-positive as "outside workspace."
+            workspace = Path(workspace).expanduser().resolve(strict=False)
             for path_str in _extract_candidate_paths(command):
                 resolved = _resolve_for_check(path_str, workspace)
                 if _is_under(resolved, workspace):

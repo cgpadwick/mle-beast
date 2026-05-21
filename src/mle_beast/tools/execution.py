@@ -219,8 +219,12 @@ def run_python_file(file_path: str, args: str = "", timeout: int = 30, max_chars
         return f"ERROR: Could not read {file_path}: {e}"
     decision = check_python_file_text(script_text)
     if not decision.allow:
+        # Preview is just the file path — `decision.rule` already
+        # carries the offending token, and embedding the full reason
+        # made the log lines less stable/greppable (each line could
+        # contain arbitrary punctuation from the reason).
         log_block(
-            f"{file_path}: {decision.reason}",
+            file_path,
             decision,
             kind="python_file",
             workspace=base_path,
