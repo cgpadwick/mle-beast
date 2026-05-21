@@ -36,7 +36,8 @@
     "shutdown\\b",
     "reboot\\b",
     "halt\\b",
-    "init\\s+0\\b"
+    "init\\s+0\\b",
+    "\\bgit\\s+push\\b"
   ],
   "allow_paths_outside_workspace": [
     "/tmp",

@@ -79,11 +79,37 @@ def test_token_match_is_word_boundary_not_substring(tmp_path):
     ":() { :|:& }; :",
     "shutdown -h now",
     "reboot",
+    # Autonomous-agent best practice: never let the agent push to the
+    # user's git remote. Local commits (the hill-climb's `experiments`
+    # branch) are still fine — only push is blocked.
+    "git push",
+    "git push origin main",
+    "git push --force",
+    "git push -f origin HEAD",
+    "git    push",                       # whitespace tolerance
+    "git push --dry-run",                # even dry-run is too push-curious
 ])
 def test_blocked_patterns_rejected(cmd, tmp_path):
     decision = check_shell_command(cmd, workspace=tmp_path)
     assert not decision.allow
     assert decision.rule.startswith("token:") or decision.rule.startswith("pattern:")
+
+
+def test_local_git_operations_still_allowed(tmp_path):
+    """The hill-climb pipeline relies on `git commit` to the workspace's
+    `experiments` branch. Only the network-affecting `git push` is
+    blocked — local commits, status, log, checkout, etc. must continue
+    to work."""
+    for cmd in [
+        "git status",
+        "git log --oneline",
+        "git commit -m 'kept experiment 3'",
+        "git checkout experiments",
+        "git diff HEAD~1",
+        "git add model.py",
+    ]:
+        decision = check_shell_command(cmd, workspace=tmp_path)
+        assert decision.allow, f"{cmd!r} should be allowed but was: {decision.reason}"
 
 
 def test_legitimate_rm_inside_workspace_allowed(tmp_path):
