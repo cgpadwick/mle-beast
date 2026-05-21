@@ -68,6 +68,8 @@ where = ["src"]
 # Ship the AGENTS.md template (and any future templates) inside the
 # wheel so `mle-beast init` can copy them from `importlib.resources`.
 "mle_beast.templates" = ["*.md", "*.txt", "*.yaml"]
+# Safety policy loaded by mle_beast.safety at import time.
+"mle_beast.safety" = ["*.json"]
 
 [tool.pytest.ini_options]
 markers = [

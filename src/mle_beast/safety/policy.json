@@ -1,0 +1,49 @@
+{
+  "_comment": [
+    "Safety policy enforced by mle_beast.safety against every shell command",
+    "and (textually) every Python file the agent executes. Edit with care:",
+    "loosening these is the right call sometimes, but understand the failure",
+    "mode you're enabling before you remove anything.",
+    "",
+    "blocked_tokens: bare words, matched as whole tokens. Used to catch",
+    "  privilege-escalation invocations the agent may hallucinate.",
+    "",
+    "blocked_patterns: full-command regex (Python re, with re.IGNORECASE).",
+    "  Use these for shapes of commands that are always wrong, regardless of",
+    "  arguments.",
+    "",
+    "allow_paths_outside_workspace: absolute path prefixes (and ~-paths)",
+    "  that destructive commands are permitted to touch even though they're",
+    "  not inside the workspace. The workspace itself is ALWAYS allowed and",
+    "  does NOT need to be listed here (it's discovered at check time via",
+    "  WorkspaceRegistry)."
+  ],
+  "blocked_tokens": [
+    "sudo",
+    "su",
+    "doas",
+    "pkexec"
+  ],
+  "blocked_patterns": [
+    "rm\\s+(-[a-zA-Z]+\\s+)*/(\\s|$)",
+    "rm\\s+(-[a-zA-Z]+\\s+)*/\\*",
+    "rm\\s+(-[a-zA-Z]+\\s+)*~(\\s|/|$)",
+    "rm\\s+(-[a-zA-Z]+\\s+)*\\$HOME\\b",
+    "mkfs(\\.|\\s)",
+    "dd\\s+(if=.+\\s+)*of=(/dev/|~|/)",
+    ":\\s*\\(\\s*\\)\\s*\\{\\s*:\\s*\\|\\s*:\\s*&\\s*\\}",
+    "(curl|wget|fetch)\\s+[^|]+\\|\\s*(sudo\\s+)?(bash|sh|zsh)\\s*(-[a-zA-Z]+)?",
+    "shutdown\\b",
+    "reboot\\b",
+    "halt\\b",
+    "init\\s+0\\b",
+    "\\bgit\\s+push\\b"
+  ],
+  "allow_paths_outside_workspace": [
+    "/tmp",
+    "/var/tmp",
+    "~/.cache",
+    "~/.config/pypoetry",
+    "~/.mle-beast"
+  ]
+}
