@@ -83,10 +83,29 @@ def _auto_detect_local_model(base_url: str) -> str:
 def _detect_provider() -> tuple[str, str]:
     """Detect provider and default model from environment variables.
 
+    Resolution order:
+      1. MLE_BEAST_PROVIDER (explicit pin set by `mle-beast init` when the
+         user picks one of several available providers). If set AND the
+         corresponding key/URL env var is also present, that wins.
+      2. LOCAL_LLM_BASE_URL set → local.
+      3. OPENROUTER_API_KEY set → openrouter.
+      4. OPENAI_API_KEY set → openai.
+
     Returns:
-        (provider, model) — provider is "local", "openrouter", or "openai".
+        (provider, model) — provider is "local", "openrouter", "openai",
+        or "none" (no provider configured).
     """
     model = os.environ.get("MLE_BEAST_MODEL", "")
+
+    pinned = (os.environ.get("MLE_BEAST_PROVIDER") or "").strip().lower()
+    if pinned == "local" and os.environ.get("LOCAL_LLM_BASE_URL"):
+        if not model:
+            model = _auto_detect_local_model(os.environ["LOCAL_LLM_BASE_URL"])
+        return "local", model
+    if pinned == "openrouter" and os.environ.get("OPENROUTER_API_KEY"):
+        return "openrouter", model or "google/gemini-3-flash-preview"
+    if pinned == "openai" and os.environ.get("OPENAI_API_KEY"):
+        return "openai", model or "gpt-5-mini"
 
     if os.environ.get("LOCAL_LLM_BASE_URL"):
         if not model:

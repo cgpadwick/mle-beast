@@ -18,10 +18,54 @@ Backwards compat: --web is accepted (and ignored — it's now the default).
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import threading
 import time
 import webbrowser
+from pathlib import Path
+
+
+def _load_dotenv_early() -> None:
+    """Load `<cwd>/.env` BEFORE any mle-beast module that reads env vars
+    (notably mle_beast.llm, which detects the provider at import time).
+
+    Uses python-dotenv if installed; falls back to a tiny inline parser
+    otherwise so this never becomes a hard dependency for users who set
+    everything in their shell env. `override=False` semantics: shell-
+    exported variables always win, .env only fills in the gaps.
+    """
+    env_path = Path.cwd() / ".env"
+    if not env_path.exists():
+        return
+    try:
+        from dotenv import load_dotenv  # type: ignore
+        load_dotenv(env_path, override=False)
+        return
+    except ImportError:
+        pass
+    # Stdlib fallback. Bare KEY=VALUE only; strips outer quotes. Skips
+    # comments and blank lines. Not as robust as python-dotenv (no
+    # interpolation, no export prefix) but good enough that the user
+    # gets `.env` support even on an install that didn't pick up the
+    # python-dotenv dep yet.
+    for line in env_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        s = line.strip()
+        if not s or s.startswith("#") or "=" not in s:
+            continue
+        key, _, value = s.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+# NOTE: _load_dotenv_early() used to run here at module load time, but
+# that polluted `mle-beast init`'s shell-detection logic — init's whole
+# job is to write .env, so it must NOT read one first (otherwise vars
+# sourced from .env look indistinguishable from shell-exported ones,
+# and we'd skip writing keys the user actually wanted persisted). The
+# call now happens inside main() AFTER subcommand dispatch.
 
 
 def _open_browser_when_ready(url: str, *, wait_seconds: float = 1.0) -> None:
@@ -46,6 +90,20 @@ def _open_browser_when_ready(url: str, *, wait_seconds: float = 1.0) -> None:
 
 
 def main() -> None:
+    # Subcommand dispatch BEFORE the main argparse setup. Keeps backward
+    # compatibility (no args → dashboard) while letting us grow new
+    # subcommands without disturbing the existing flag set.
+    #
+    # Critical ordering: `init` runs WITHOUT loading .env first. Its
+    # whole job is to set up .env, so reading from one would pollute
+    # the shell-vs-.env detection logic. All other subcommands (and
+    # the no-subcommand dashboard default) load .env as expected.
+    if len(sys.argv) > 1 and sys.argv[1] == "init":
+        from mle_beast.cli.init import run_init
+        sys.exit(run_init(sys.argv[2:]))
+
+    _load_dotenv_early()
+
     parser = argparse.ArgumentParser(
         prog="mle-beast",
         description="MLE-Beast — LLM-driven ML engineering agent",
