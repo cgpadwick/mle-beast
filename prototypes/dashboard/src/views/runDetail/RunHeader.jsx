@@ -37,12 +37,13 @@ function RunHeader({ run, runId, stageMap, activeStageKey, peak, onBack, onCance
   const reportable = run.status && run.status !== "running" && run.status !== "pending";
   return (
     <>
-    {/* Right padding bumped from 24 → 76 to reserve room for the
-        fixed-position gear button in App.jsx (36px wide at right:16).
-        Without this offset the gear visually overlaps Cancel Run /
-        PEAK in the right cluster. */}
+    {/* Right padding reserves room for the fixed-position top-right
+        cluster in App.jsx — two buttons (theme toggle + gear), each
+        36px wide with 8px gap, anchored at right:16. Total cluster
+        width ~80px; we leave a small buffer so PEAK / Cancel Run
+        don't visually overlap. */}
     <div style={{
-      padding: "9px 76px 9px 24px", borderBottom: "1px solid var(--border)",
+      padding: "9px 112px 9px 24px", borderBottom: "1px solid var(--border)",
       display: "flex", alignItems: "center", justifyContent: "space-between",
       flexShrink: 0,
     }}>

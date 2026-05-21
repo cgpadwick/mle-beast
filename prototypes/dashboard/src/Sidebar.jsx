@@ -1,6 +1,6 @@
 // Sidebar: top-level navigation between views.
 
-function Sidebar({ view, setView, theme, onToggleTheme }) {
+function Sidebar({ view, setView }) {
   const items = [
     {
       key: "list",
@@ -61,24 +61,10 @@ function Sidebar({ view, setView, theme, onToggleTheme }) {
         );
       })}
       <div style={{ flex: 1 }} />
-      <button onClick={onToggleTheme} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} style={{
-        width: 42, height: 42, borderRadius: 12, border: "none", cursor: "pointer",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        background: "transparent", color: "var(--text-faint)", marginBottom: 4,
-      }}>
-        {theme === "dark" ? (
-          // Sun icon — switching to light
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="1.5" />
-            <path d="M9 1.5V3M9 15V16.5M1.5 9H3M15 9H16.5M3.4 3.4L4.5 4.5M13.5 13.5L14.6 14.6M14.6 3.4L13.5 4.5M4.5 13.5L3.4 14.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-          </svg>
-        ) : (
-          // Moon icon — switching to dark
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <path d="M14.5 11.5C13.4 11.9 12.2 12.1 11 12.1C7 12.1 3.7 8.8 3.7 4.8C3.7 4 3.8 3.2 4.1 2.5C2.4 3.4 1.2 5.2 1.2 7.3C1.2 10.6 3.9 13.3 7.2 13.3C9.4 13.3 11.4 12.1 12.5 10.3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        )}
-      </button>
+      {/* Theme toggle moved out of the sidebar (lower-left) up to the
+          top-right area next to the gear in App.jsx — that's where most
+          users expect to find it (Vercel / Linear / etc. all follow
+          this convention). */}
       <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--status-ok-fg)", marginBottom: 10, boxShadow: "0 0 10px rgba(74,222,128,0.4)" }} />
       <div style={{ writingMode: "vertical-rl", fontSize: 8, fontWeight: 800, letterSpacing: "2.5px", color: "var(--text-faint)", fontFamily: "'JetBrains Mono',monospace", marginBottom: 16 }}>BEAST</div>
     </div>
