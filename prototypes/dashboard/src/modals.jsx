@@ -53,13 +53,13 @@ function DetailsModal({ run, peak, onClose }) {
         <div style={{ marginBottom: 18 }}>
           <div style={{ fontSize: 9, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "1.5px", fontFamily: "'JetBrains Mono',monospace", marginBottom: 6 }}>CONFIGURATION</div>
           <DetailRow label="Status" value={run.status} valueColor={
-            run.status === "running" ? "#22d3ee" :
-            run.status === "completed" ? "#4ade80" :
-            (run.status === "failed" || run.status === "cancelled") ? "#f87171" : undefined
+            run.status === "running" ? "var(--accent-info)" :
+            run.status === "completed" ? "var(--status-ok-fg)" :
+            (run.status === "failed" || run.status === "cancelled") ? "var(--status-fail-fg)" : undefined
           } />
           <DetailRow label="Mode" value={run.mode} mono />
           <DetailRow label="Task" value={run.task} />
-          <DetailRow label="Target" value={run.target_accuracy} mono valueColor="#22d3ee" />
+          <DetailRow label="Target" value={run.target_accuracy} mono valueColor="var(--accent-info)" />
           <DetailRow label="Metric Name" value={run.metric_name || "(auto-detect from log)"} mono />
           <DetailRow
             label="Metric Direction"
@@ -93,24 +93,24 @@ function DetailsModal({ run, peak, onClose }) {
             label="Total Cost"
             value={(run.total_cost_usd ?? 0) > 0 ? `$${Number(run.total_cost_usd).toFixed(4)}` : "(not reported)"}
             mono
-            valueColor={(run.total_cost_usd ?? 0) > 0 ? "#22d3ee" : undefined}
+            valueColor={(run.total_cost_usd ?? 0) > 0 ? "var(--accent-info)" : undefined}
           />
           <DetailRow label="LLM Calls" value={run.total_llm_calls ?? 0} mono />
           <DetailRow label="Prompt Tokens" value={(run.total_prompt_tokens ?? 0).toLocaleString()} mono />
           <DetailRow label="Completion Tokens" value={(run.total_completion_tokens ?? 0).toLocaleString()} mono />
           {(run.total_reasoning_tokens ?? 0) > 0 && (
-            <DetailRow label="Reasoning Tokens" value={(run.total_reasoning_tokens).toLocaleString()} mono valueColor="#fbbf24" />
+            <DetailRow label="Reasoning Tokens" value={(run.total_reasoning_tokens).toLocaleString()} mono valueColor="var(--status-warn-fg)" />
           )}
         </div>
 
         {peak && (
           <div style={{ marginBottom: 18 }}>
             <div style={{ fontSize: 9, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "1.5px", fontFamily: "'JetBrains Mono',monospace", marginBottom: 6 }}>RESULTS</div>
-            <DetailRow label="Best Score" value={Number(peak.score).toFixed(4)} mono valueColor="#22d3ee" />
+            <DetailRow label="Best Score" value={Number(peak.score).toFixed(4)} mono valueColor="var(--accent-info)" />
             <DetailRow label="At Step" value={peak.step} mono />
             <DetailRow label="Direction" value={peak.lower_is_better ? "lower-is-better" : "higher-is-better"} mono />
-            <DetailRow label="Kept" value={peak.kept_count} mono valueColor="#4ade80" />
-            <DetailRow label="Reverted" value={peak.reverted_count} mono valueColor="#f87171" />
+            <DetailRow label="Kept" value={peak.kept_count} mono valueColor="var(--status-ok-fg)" />
+            <DetailRow label="Reverted" value={peak.reverted_count} mono valueColor="var(--status-fail-fg)" />
           </div>
         )}
 
@@ -118,7 +118,7 @@ function DetailsModal({ run, peak, onClose }) {
           <div>
             <div style={{ fontSize: 9, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "1.5px", fontFamily: "'JetBrains Mono',monospace", marginBottom: 6 }}>OUTCOME</div>
             {run.error_message && (
-              <DetailRow label="Error" value={run.error_message} valueColor="#f87171" />
+              <DetailRow label="Error" value={run.error_message} valueColor="var(--status-fail-fg)" />
             )}
             {verdict && typeof verdict === "object" && (
               <pre style={{

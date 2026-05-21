@@ -28,8 +28,8 @@ function JsonStringBlock({ value }) {
 function JsonView({ value, depth = 0, fieldKey }) {
   // Primitives
   if (value === null) return <span style={{ color: "var(--text-muted)" }}>null</span>;
-  if (typeof value === "boolean") return <span style={{ color: "#fbbf24" }}>{String(value)}</span>;
-  if (typeof value === "number") return <span style={{ color: "#fbbf24" }}>{String(value)}</span>;
+  if (typeof value === "boolean") return <span style={{ color: "var(--status-warn-fg)" }}>{String(value)}</span>;
+  if (typeof value === "number") return <span style={{ color: "var(--status-warn-fg)" }}>{String(value)}</span>;
   if (typeof value === "string") {
     if (_stringNeedsBlock(value)) {
       return <JsonStringBlock value={value} />;

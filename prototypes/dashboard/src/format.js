@@ -80,11 +80,11 @@ function eventToItem(ev) {
 }
 
 function getColor(item) {
-  if (item.type === "critic") return item.verdict ? "#4ade80" : "#f87171";
+  if (item.type === "critic") return item.verdict ? "var(--status-ok-fg)" : "var(--status-fail-fg)";
   if (item.type === "score") {
-    if (item.delta && item.delta.startsWith("-")) return "#f87171";
-    if (item.msg && item.msg.includes("Final")) return "#fbbf24";
-    if (item.delta) return "#22d3ee";
+    if (item.delta && item.delta.startsWith("-")) return "var(--status-fail-fg)";
+    if (item.msg && item.msg.includes("Final")) return "var(--status-warn-fg)";
+    if (item.delta) return "var(--accent-info)";
     return "var(--text-muted)";
   }
   if (item.type === "actor") return "#c4b5fd";
@@ -108,7 +108,7 @@ function _stringNeedsBlock(s) {
 }
 function ROLE_COLOR(role) {
   if (role === "system") return "var(--text-muted)";
-  if (role === "user") return "#fbbf24";
+  if (role === "user") return "var(--status-warn-fg)";
   if (role === "assistant") return "#a78bfa";
   return "var(--text-muted)";
 }

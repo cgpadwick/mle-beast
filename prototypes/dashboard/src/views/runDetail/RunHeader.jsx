@@ -37,12 +37,13 @@ function RunHeader({ run, runId, stageMap, activeStageKey, peak, onBack, onCance
   const reportable = run.status && run.status !== "running" && run.status !== "pending";
   return (
     <>
-    {/* Right padding bumped from 24 → 76 to reserve room for the
-        fixed-position gear button in App.jsx (36px wide at right:16).
-        Without this offset the gear visually overlaps Cancel Run /
-        PEAK in the right cluster. */}
+    {/* Right padding reserves room for the fixed-position top-right
+        cluster in App.jsx — two buttons (theme toggle + gear), each
+        36px wide with 8px gap, anchored at right:16. Total cluster
+        width ~80px; we leave a small buffer so PEAK / Cancel Run
+        don't visually overlap. */}
     <div style={{
-      padding: "9px 76px 9px 24px", borderBottom: "1px solid var(--border)",
+      padding: "9px 112px 9px 24px", borderBottom: "1px solid var(--border)",
       display: "flex", alignItems: "center", justifyContent: "space-between",
       flexShrink: 0,
     }}>
@@ -71,8 +72,12 @@ function RunHeader({ run, runId, stageMap, activeStageKey, peak, onBack, onCance
             border: "1px solid rgba(129,140,248,0.25)",
           }}>
             <span style={{
-              width: 6, height: 6, borderRadius: "50%", background: "#fafafa",
-              boxShadow: "0 0 6px rgba(255,255,255,0.9)",
+              width: 6, height: 6, borderRadius: "50%",
+              // Lavender dot + glow — reads on both themes. Previously
+              // a white dot with a white glow, which vanished on light
+              // mode against the white dashboard bg.
+              background: "#818cf8",
+              boxShadow: "0 0 6px rgba(129,140,248,0.9)",
               animation: "pipePulse 1.2s ease-in-out infinite",
             }} />
             {(STAGES_ORDER.find(s => s.key === activeStageKey)?.name || activeStageKey).toUpperCase()}
@@ -84,7 +89,7 @@ function RunHeader({ run, runId, stageMap, activeStageKey, peak, onBack, onCance
           fontSize: 11, color: "var(--text-faint)",
           fontFamily: "'JetBrains Mono',monospace",
         }}>
-          PEAK: <span style={{ color: "#22d3ee", fontWeight: 700, fontSize: 14 }}>
+          PEAK: <span style={{ color: "var(--accent-info)", fontWeight: 700, fontSize: 14 }}>
             {peak ? Number(peak.score).toFixed(4) : "—"}
           </span>
         </span>

@@ -709,8 +709,33 @@ class TestSettingsRoutes:
         )
         monkeypatch.setenv("LOCAL_LLM_BASE_URL", "http://localhost:9999/v1")
         body = client.get("/api/local-model-name").json()
-        assert body == {"model": "fake-local-model"}
+        # `configured` flag added so the frontend can distinguish
+        # "no local LLM set up" from "local LLM set but probe failed".
+        assert body == {"model": "fake-local-model", "configured": True}
         assert called["base_url"] == "http://localhost:9999/v1"
+
+    def test_local_model_name_short_circuits_when_not_configured(
+        self, client, monkeypatch
+    ):
+        """When `LOCAL_LLM_BASE_URL` isn't set, the endpoint must NOT
+        call the detector (which previously defaulted to hitting
+        http://localhost:8000/v1 — i.e., the dashboard server itself
+        — and waited ~30s for retries to time out, blocking the
+        FastAPI event loop). Regression test for the slow-load bug
+        diagnosed in PR #18."""
+        called = []
+
+        def fake_detect(base_url):
+            called.append(base_url)
+            return "should-not-be-called"
+
+        monkeypatch.setattr(
+            "mle_beast.llm._auto_detect_local_model", fake_detect,
+        )
+        monkeypatch.delenv("LOCAL_LLM_BASE_URL", raising=False)
+        body = client.get("/api/local-model-name").json()
+        assert body == {"model": None, "configured": False}
+        assert called == [], "detector must not run when LOCAL_LLM_BASE_URL is unset"
 
 
 # ---------------------------------------------------------------------------

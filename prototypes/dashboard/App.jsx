@@ -29,39 +29,96 @@ export default function App() {
     <div className={`theme-${theme}`} style={{ display: "flex", height: "100vh", background: "var(--bg)", color: "var(--text)", fontFamily: "'DM Sans',system-ui,sans-serif", overflow: "hidden" }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
-      <Sidebar view={view} setView={setView} theme={theme} onToggleTheme={toggleTheme} />
+      <Sidebar view={view} setView={setView} />
 
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
-        {/* Fixed-position gear button — always reachable from any view.
-            Stays out of the layout flow so the underlying view doesn't
-            need to know about it. Clicking sets view=settings; when
-            already in settings, the SettingsView renders its own
-            back button so we just leave this gear visible. */}
-        <button
-          onClick={() => setView(view === "settings" ? "list" : "settings")}
-          title="Settings &amp; Admin"
-          style={{
-            position: "absolute", top: 12, right: 16, zIndex: 10,
-            width: 36, height: 36, borderRadius: 10,
-            border: "1px solid var(--border)", cursor: "pointer",
-            background: view === "settings" ? "rgba(99,102,241,0.15)" : "var(--surface)",
-            color: view === "settings" ? "#a5b4fc" : "var(--text-muted)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            transition: "all 0.15s",
-          }}
-        >
-          {/* Proper gear icon (Lucide "settings"). 8 lobes + center
-              hole, no radial spokes — visually distinct from the
-              sun/moon theme toggle in the sidebar. */}
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" strokeWidth="2"
-               strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-            <circle cx="12" cy="12" r="3" />
-          </svg>
-        </button>
+        {/* Top-right utility cluster — theme toggle + gear. Both are
+            fixed-position so they stay reachable from any view without
+            the underlying layout needing to make room.
 
-        {view === "list" && <RunsListView onOpen={open} onNew={() => setView("new")} />}
+            Two-context styling:
+              - On the runs list view, the cluster sits on top of the
+                hero banner, which is hardcoded `backgroundColor: "#000"`
+                in BOTH themes (design choice — the gravitational-waves
+                photo needs the dark canvas). So in light mode the
+                normally-dark buttons would vanish on the black hero.
+                When view === "list" we force the "dark context" style
+                (light frosted button on dark) regardless of theme.
+              - On every other view (detail, new, settings) the cluster
+                is over the regular page bg and we use theme-aware
+                styling. */}
+        {(() => {
+        const onHero = view === "list";
+        const btnBg = onHero
+          ? "rgba(255,255,255,0.14)"
+          : (theme === "dark" ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.06)");
+        const btnBorder = onHero
+          ? "rgba(255,255,255,0.32)"
+          : (theme === "dark" ? "rgba(255,255,255,0.25)" : "rgba(15,23,42,0.20)");
+        const btnColor = onHero
+          ? "rgba(255,255,255,0.92)"
+          : (theme === "dark" ? "rgba(255,255,255,0.85)" : "rgba(15,23,42,0.75)");
+        return (
+        <div style={{
+          position: "absolute", top: 12, right: 16, zIndex: 10,
+          display: "flex", alignItems: "center", gap: 8,
+        }}>
+          <button
+            onClick={toggleTheme}
+            title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            style={{
+              width: 36, height: 36, borderRadius: 10,
+              border: `1px solid ${btnBorder}`,
+              cursor: "pointer",
+              background: btnBg,
+              color: btnColor,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              transition: "all 0.15s",
+              backdropFilter: "blur(8px)",
+            }}
+          >
+            {theme === "dark" ? (
+              // Sun icon — switching to light
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M9 1.5V3M9 15V16.5M1.5 9H3M15 9H16.5M3.4 3.4L4.5 4.5M13.5 13.5L14.6 14.6M14.6 3.4L13.5 4.5M4.5 13.5L3.4 14.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
+            ) : (
+              // Moon icon — switching to dark
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <path d="M14.5 11.5C13.4 11.9 12.2 12.1 11 12.1C7 12.1 3.7 8.8 3.7 4.8C3.7 4 3.8 3.2 4.1 2.5C2.4 3.4 1.2 5.2 1.2 7.3C1.2 10.6 3.9 13.3 7.2 13.3C9.4 13.3 11.4 12.1 12.5 10.3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </button>
+          <button
+            onClick={() => setView(view === "settings" ? "list" : "settings")}
+            title="Settings &amp; Admin"
+            style={{
+              width: 36, height: 36, borderRadius: 10,
+              border: `1px solid ${btnBorder}`,
+              cursor: "pointer",
+              background: view === "settings" ? "rgba(99,102,241,0.20)" : btnBg,
+              color: view === "settings" ? "#a5b4fc" : btnColor,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              transition: "all 0.15s",
+              backdropFilter: "blur(8px)",
+            }}
+          >
+            {/* Proper gear icon (Lucide "settings"). 8 lobes + center
+                hole, no radial spokes — visually distinct from the
+                sun/moon theme toggle to its left. */}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" strokeWidth="2"
+                 strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          </button>
+        </div>
+        );
+        })()}
+
+        {view === "list" && <RunsListView onOpen={open} onNew={() => setView("new")} onHome={() => setView("list")} />}
         {view === "new" && <NewRunView onCreated={open} onCancel={() => setView("list")} />}
         {view === "detail" && currentRunId && <RunDetailView runId={currentRunId} onBack={() => setView("list")} />}
         {view === "settings" && <SettingsView onClose={() => setView("list")} />}
@@ -85,6 +142,21 @@ export default function App() {
           --border-subtle: rgba(255,255,255,0.04);
           --code-bg: rgba(0,0,0,0.25);
           --shadow: 0 4px 12px rgba(0,0,0,0.4);
+          /* The "interesting metric" accent used by PEAK / kept / etc.
+             On dark this is a glowing cyan that pops against near-black;
+             on light we shift to a deeper teal/cyan that still reads on
+             near-white. Use the strong variant for filled badges or
+             text on a tinted background. */
+          --accent-info: #22d3ee;
+          --accent-info-strong: #0891b2;
+          /* Status pill foregrounds. On dark these are saturated
+             lights (the Tailwind 400-shade family) that glow against
+             near-black. On light we shift to the 700-shade family
+             so they read on white without losing the green / red /
+             amber semantic. Backgrounds stay rgba-tinted on both. */
+          --status-ok-fg: #4ade80;
+          --status-fail-fg: #f87171;
+          --status-warn-fg: #fbbf24;
         }
         .theme-light {
           --bg: #f5f7fb;
@@ -99,6 +171,11 @@ export default function App() {
           --border-subtle: rgba(15,23,42,0.06);
           --code-bg: rgba(15,23,42,0.05);
           --shadow: 0 4px 12px rgba(15,23,42,0.08);
+          --accent-info: #0891b2;
+          --accent-info-strong: #155e75;
+          --status-ok-fg: #15803d;
+          --status-fail-fg: #b91c1c;
+          --status-warn-fg: #b45309;
         }
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }

@@ -31,7 +31,7 @@ function StatsCards({ run, peak, onShowDetails }) {
                 fontFamily: "'JetBrains Mono',monospace", fontWeight: 600,
               }}>TARGET</span>
               <span style={{
-                background: "rgba(34,211,238,0.1)", color: "#22d3ee",
+                background: "rgba(34,211,238,0.1)", color: "var(--accent-info)",
                 fontSize: 10, fontWeight: 600, padding: "2px 8px",
                 borderRadius: 4, fontFamily: "'JetBrains Mono',monospace",
               }}>{run.target_accuracy}</span>
@@ -58,14 +58,14 @@ function StatsCards({ run, peak, onShowDetails }) {
         <StatCard label="WALL TIME"
                   value={fmtDuration(run.started_at, run.completed_at)}
                   hint={run.status}
-                  hintColor={run.status === "running" ? "#22d3ee" : "var(--text-subtle)"}
+                  hintColor={run.status === "running" ? "var(--accent-info)" : "var(--text-subtle)"}
         />
         <StatCard label="EXPERIMENTS"
                   value={peak ? `${peak.kept_count}/${peak.kept_count + peak.reverted_count}` : "0"}
                   hint="kept"
         />
         <StatCard label="LLM USAGE"
-                  valueColor="#4ade80"
+                  valueColor="var(--status-ok-fg)"
                   value={run.total_cost_usd != null
                     ? `$${Number(run.total_cost_usd).toFixed(3)}`
                     : "$0.000"}

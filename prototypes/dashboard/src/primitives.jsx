@@ -10,18 +10,21 @@ function Row({ label, value, accent }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid var(--border-subtle)" }}>
       <span style={{ fontSize: 12, color: "var(--text-subtle)" }}>{label}</span>
-      <span style={{ fontSize: 12, color: accent ? "#22d3ee" : "var(--text-muted)", fontWeight: accent ? 700 : 400, fontFamily: "'JetBrains Mono',monospace" }}>{value}</span>
+      <span style={{ fontSize: 12, color: accent ? "var(--accent-info)" : "var(--text-muted)", fontWeight: accent ? 700 : 400, fontFamily: "'JetBrains Mono',monospace" }}>{value}</span>
     </div>
   );
 }
 
 function StatusPill({ status }) {
+  // Backgrounds stay rgba-tinted (work on both themes); foregrounds
+  // come from theme-aware CSS vars so they actually read on white in
+  // light mode and stay vivid on near-black in dark mode.
   const colors = {
-    running:   { bg: "rgba(34,211,238,0.1)",  fg: "#22d3ee" },
+    running:   { bg: "rgba(34,211,238,0.1)",  fg: "var(--accent-info)" },
     pending:   { bg: "var(--surface-strong)", fg: "var(--text-muted)" },
-    completed: { bg: "rgba(74,222,128,0.1)",  fg: "#4ade80" },
-    failed:    { bg: "rgba(248,113,113,0.1)", fg: "#f87171" },
-    cancelled: { bg: "rgba(248,113,113,0.08)", fg: "#fbbf24" },
+    completed: { bg: "rgba(74,222,128,0.1)",  fg: "var(--status-ok-fg)" },
+    failed:    { bg: "rgba(248,113,113,0.1)", fg: "var(--status-fail-fg)" },
+    cancelled: { bg: "rgba(248,113,113,0.08)", fg: "var(--status-warn-fg)" },
   };
   const c = colors[status] || colors.pending;
   return (

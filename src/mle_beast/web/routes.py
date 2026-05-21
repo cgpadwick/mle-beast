@@ -482,13 +482,32 @@ def register_routes(app: FastAPI) -> None:
 
     @app.get("/api/local-model-name")
     async def api_local_model_name():
-        """Auto-discover the model name from a local LLM server."""
+        """Auto-discover the model name from a local LLM server.
+
+        Only runs detection when `LOCAL_LLM_BASE_URL` is explicitly
+        set. The previous default of `http://localhost:8000/v1` was
+        always wrong — that's the dashboard's own address, so the
+        detection probe would call OURSELVES, 404, retry twice
+        (OpenAI client default), and finally give up after ~30s.
+        That hold also blocked the FastAPI event loop the whole
+        time (the underlying client.models.list() is a sync call),
+        so other requests queued behind it — causing the
+        "settings → back to runs" navigation to look frozen.
+
+        We also push the detection into a worker thread via
+        asyncio.to_thread so even a legitimately-configured local
+        LLM server with high latency can't block the event loop.
+        """
+        import asyncio
         import os
 
+        base_url = os.environ.get("LOCAL_LLM_BASE_URL")
+        if not base_url:
+            return {"model": None, "configured": False}
+
         from mle_beast.llm import _auto_detect_local_model
-        base_url = os.environ.get("LOCAL_LLM_BASE_URL", "http://localhost:8000/v1")
-        model = _auto_detect_local_model(base_url)
-        return {"model": model}
+        model = await asyncio.to_thread(_auto_detect_local_model, base_url)
+        return {"model": model, "configured": True}
 
     @app.post("/api/settings")
     async def api_save_settings(request: Request):
