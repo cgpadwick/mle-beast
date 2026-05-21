@@ -138,6 +138,47 @@ Recommended models (good cost/quality for hill-climbing):
 | OpenAI | `gpt-5-mini` | Solid, more expensive |
 | Local | `Qwen/Qwen3-Coder-30B-A3B-Instruct` | Strong open-weight code model |
 
+## Safety guardrails
+
+Every shell command and Python file the agent runs is pre-screened against a small policy at `src/mle_beast/safety/policy.json`. Blocked commands return a recoverable error string (`ERROR: blocked by safety policy: <reason>`) that the agent sees in its tool-result loop and self-corrects from — the run continues, the dangerous command never executes.
+
+**Blocked by default:**
+
+- **Privilege escalation tokens**: `sudo`, `su`, `doas`, `pkexec`. Word-boundary matched, so `pseudo-random` is fine.
+- **Catastrophic patterns**: `rm -rf /`, `rm -rf ~`, `mkfs`, `dd if=...of=/dev/`, `curl ... | bash`, fork bombs, `shutdown` / `reboot`.
+- **Workspace escapes**: any destructive verb (`rm`, `mv`, `chmod`, `chown`, `tee`, shell redirects) with an absolute or `..`-relative path that resolves outside the workspace.
+- **Remote git mutations**: `git push` (any form). Local git operations — `commit`, `status`, `log`, `checkout`, `diff`, `add` — are always allowed because the hill-climb pipeline relies on them.
+
+**Deliberately NOT blocked:**
+
+- Read-only commands outside the workspace (`cat /etc/os-release`, `ls /usr/lib`) — the agent legitimately needs to inspect system files sometimes.
+- Workspace-internal writes (`rm -rf checkpoints/old`, `mv train.py train.py.bak`) — workspace cleanup is normal hill-climb behavior.
+- Writes to allow-listed paths outside the workspace: `/tmp`, `/var/tmp`, `~/.cache`, `~/.config/pypoetry`, `~/.mle-beast` (these hold poetry caches, dataset downloads, mle-beast's own DB).
+
+### Editing the policy
+
+Open `src/mle_beast/safety/policy.json` and:
+
+- Add a whole-word token (e.g. another privilege-escalation tool) to `blocked_tokens`.
+- Add a Python regex (case-insensitive, matched against the full command line) to `blocked_patterns`.
+- Add a path you DO want writable outside the workspace to `allow_paths_outside_workspace`.
+
+Restart any running mle-beast process to pick up the change — the policy is loaded once per process and cached.
+
+### Audit log
+
+Every block is appended to `<workspace>/logs/safety.log` as a tab-separated line:
+
+```
+2026-05-21T11:24:33	shell	token:sudo	sudo apt install foo
+```
+
+Useful when a run takes a recovery path you didn't expect — grep the file to see exactly what was blocked and why.
+
+### Threat model
+
+These guardrails catch the **confused-LLM failure mode** — an agent that hallucinates `sudo apt install ...` or accidentally points `rm -rf` at the wrong directory. They are NOT a sandbox: a deliberately adversarial model could bypass string-based checks (e.g. `$(echo s)udo`, `base64 -d | sh`). For threat models that include hostile prompts, container-based isolation is the correct answer; mle-beast doesn't ship that today.
+
 ## Configuration via project.yaml
 
 Sample projects in `tests/integration/*/project.yaml` show the full schema. The minimum:
