@@ -277,7 +277,7 @@ function SettingsTab({ settings, numericTypes, provider, update, save, saving, s
         {savedMsg && (
           <span style={{
             fontSize: 11, fontFamily: "'JetBrains Mono',monospace",
-            color: savedMsg.ok ? "#4ade80" : "#fca5a5",
+            color: savedMsg.ok ? "var(--status-ok-fg)" : "#fca5a5",
           }}>
             {savedMsg.msg}
           </span>
@@ -433,7 +433,7 @@ function AdminTab() {
       {msg && (
         <div style={{
           fontSize: 11, fontFamily: "'JetBrains Mono',monospace", marginTop: 14,
-          color: msg.ok ? "#4ade80" : "#fca5a5",
+          color: msg.ok ? "var(--status-ok-fg)" : "#fca5a5",
         }}>
           {msg.txt}
         </div>

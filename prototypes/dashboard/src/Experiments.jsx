@@ -32,8 +32,8 @@ function ScoreChart({ experiments }) {
     <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%" }}>
       <defs>
         <linearGradient id="aGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.14" />
-          <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
+          <stop offset="0%" stopColor="var(--accent-info)" stopOpacity="0.14" />
+          <stop offset="100%" stopColor="var(--accent-info)" stopOpacity="0" />
         </linearGradient>
       </defs>
       {gridLines.map(t => (
@@ -43,17 +43,17 @@ function ScoreChart({ experiments }) {
         </g>
       ))}
       <polygon points={area} fill="url(#aGrad)" />
-      <polyline points={pts} fill="none" stroke="#22d3ee" strokeWidth="2.5" strokeLinejoin="round" />
+      <polyline points={pts} fill="none" stroke="var(--accent-info)" strokeWidth="2.5" strokeLinejoin="round" />
       {kept.map((e, i) => (
-        <circle key={e.step} cx={toX(i)} cy={toY(e.score)} r="4" fill="#0a0c14" stroke="#22d3ee" strokeWidth="2" />
+        <circle key={e.step} cx={toX(i)} cy={toY(e.score)} r="4" fill="var(--bg)" stroke="var(--accent-info)" strokeWidth="2" />
       ))}
       {experiments.filter(e => !e.kept && e.score !== null).map(e => {
         const pi = kept.findIndex(k => k.step === e.parent_step);
         if (pi < 0) return null;
         return (
           <g key={`rv${e.step}`}>
-            <line x1={toX(pi)} y1={toY(kept[pi].score)} x2={toX(pi) + 14} y2={toY(e.score)} stroke="#f87171" strokeWidth="1.5" strokeDasharray="4,3" opacity="0.3" />
-            <circle cx={toX(pi) + 14} cy={toY(e.score)} r="3" fill="#140c0c" stroke="#f87171" strokeWidth="1.5" />
+            <line x1={toX(pi)} y1={toY(kept[pi].score)} x2={toX(pi) + 14} y2={toY(e.score)} stroke="var(--status-fail-fg)" strokeWidth="1.5" strokeDasharray="4,3" opacity="0.3" />
+            <circle cx={toX(pi) + 14} cy={toY(e.score)} r="3" fill="var(--bg)" stroke="var(--status-fail-fg)" strokeWidth="1.5" />
           </g>
         );
       })}
@@ -113,7 +113,7 @@ function ExperimentTree({ experiments, selected, onSelect }) {
         return (
           <path key={`edge${e.step}`}
             d={`M${x1} ${y1}C${x1} ${mid},${x2} ${mid},${x2} ${y2}`}
-            fill="none" stroke={e.kept ? "#22d3ee" : "#f87171"} strokeWidth={e.kept ? 1.5 : 1}
+            fill="none" stroke={e.kept ? "var(--accent-info)" : "var(--status-fail-fg)"} strokeWidth={e.kept ? 1.5 : 1}
             strokeDasharray={e.kept ? "none" : "5,4"} opacity={e.kept ? 0.3 : 0.18}
           />
         );
@@ -130,9 +130,9 @@ function ExperimentTree({ experiments, selected, onSelect }) {
               strokeWidth={isSel ? 1.5 : 1} filter={isSel ? "url(#glow)" : undefined}
             />
             <text x={p.x + 7} y={p.y + 14} fill={!e.kept ? "#fca5a5" : "var(--text-subtle)"} fontSize="8" fontWeight="600" fontFamily="'JetBrains Mono',monospace">{name}</text>
-            <text x={p.x + 7} y={p.y + 30} fill={!e.kept ? "#f87171" : "#22d3ee"} fontSize="13" fontWeight="700" fontFamily="'JetBrains Mono',monospace">{fmtScore(e.score)}</text>
-            {!e.kept && <text x={p.x + nW - 7} y={p.y + 14} fill="#f87171" fontSize="7" textAnchor="end" fontFamily="'JetBrains Mono',monospace">x</text>}
-            {e.kept && e.step > 0 && <text x={p.x + nW - 7} y={p.y + 14} fill="#4ade80" fontSize="7" textAnchor="end" fontFamily="'JetBrains Mono',monospace">ok</text>}
+            <text x={p.x + 7} y={p.y + 30} fill={!e.kept ? "var(--status-fail-fg)" : "var(--accent-info)"} fontSize="13" fontWeight="700" fontFamily="'JetBrains Mono',monospace">{fmtScore(e.score)}</text>
+            {!e.kept && <text x={p.x + nW - 7} y={p.y + 14} fill="var(--status-fail-fg)" fontSize="7" textAnchor="end" fontFamily="'JetBrains Mono',monospace">x</text>}
+            {e.kept && e.step > 0 && <text x={p.x + nW - 7} y={p.y + 14} fill="var(--status-ok-fg)" fontSize="7" textAnchor="end" fontFamily="'JetBrains Mono',monospace">ok</text>}
           </g>
         );
       })}

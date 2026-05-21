@@ -81,8 +81,8 @@ function HillClimbStagePanel({ experiments, selStep, onSelectStep }) {
             display: "flex", gap: 10, fontSize: 9,
             fontFamily: "'JetBrains Mono',monospace",
           }}>
-            <span style={{ color: "#22d3ee" }}>kept</span>
-            <span style={{ color: "#f87171" }}>reverted</span>
+            <span style={{ color: "var(--accent-info)" }}>kept</span>
+            <span style={{ color: "var(--status-fail-fg)" }}>reverted</span>
           </div>
         </div>
         <ExperimentTree
@@ -115,7 +115,7 @@ function SelectedExperimentCard({ exp }) {
             {exp.step === 0 ? "Baseline" : `Iter ${exp.step}`}
           </span>
           <span style={{
-            color: exp.kept ? "#4ade80" : "#f87171",
+            color: exp.kept ? "var(--status-ok-fg)" : "var(--status-fail-fg)",
             fontSize: 9, marginLeft: 6,
           }}>
             {exp.kept ? "KEPT" : "REVERTED"}
@@ -133,7 +133,7 @@ function SelectedExperimentCard({ exp }) {
         <div style={{
           fontSize: 18, fontWeight: 700,
           fontFamily: "'JetBrains Mono',monospace",
-          color: exp.kept ? "#22d3ee" : "#f87171",
+          color: exp.kept ? "var(--accent-info)" : "var(--status-fail-fg)",
         }}>
           {fmtScore(exp.score)}
         </div>

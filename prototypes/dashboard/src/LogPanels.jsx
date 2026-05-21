@@ -199,7 +199,7 @@ function GitLogPanel({ runId, isRunning }) {
           borderRadius: "0 6px 6px 0",
         }}>
           <span style={{
-            fontSize: 10, color: "#22d3ee", fontFamily: "'JetBrains Mono',monospace",
+            fontSize: 10, color: "var(--accent-info)", fontFamily: "'JetBrains Mono',monospace",
             flexShrink: 0, paddingTop: 1,
           }}>{c.short}</span>
           <div style={{ flex: 1, minWidth: 0 }}>

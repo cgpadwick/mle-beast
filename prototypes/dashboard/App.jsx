@@ -85,6 +85,21 @@ export default function App() {
           --border-subtle: rgba(255,255,255,0.04);
           --code-bg: rgba(0,0,0,0.25);
           --shadow: 0 4px 12px rgba(0,0,0,0.4);
+          /* The "interesting metric" accent used by PEAK / kept / etc.
+             On dark this is a glowing cyan that pops against near-black;
+             on light we shift to a deeper teal/cyan that still reads on
+             near-white. Use the strong variant for filled badges or
+             text on a tinted background. */
+          --accent-info: #22d3ee;
+          --accent-info-strong: #0891b2;
+          /* Status pill foregrounds. On dark these are saturated
+             lights (the Tailwind 400-shade family) that glow against
+             near-black. On light we shift to the 700-shade family
+             so they read on white without losing the green / red /
+             amber semantic. Backgrounds stay rgba-tinted on both. */
+          --status-ok-fg: #4ade80;
+          --status-fail-fg: #f87171;
+          --status-warn-fg: #fbbf24;
         }
         .theme-light {
           --bg: #f5f7fb;
@@ -99,6 +114,11 @@ export default function App() {
           --border-subtle: rgba(15,23,42,0.06);
           --code-bg: rgba(15,23,42,0.05);
           --shadow: 0 4px 12px rgba(15,23,42,0.08);
+          --accent-info: #0891b2;
+          --accent-info-strong: #155e75;
+          --status-ok-fg: #15803d;
+          --status-fail-fg: #b91c1c;
+          --status-warn-fg: #b45309;
         }
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }

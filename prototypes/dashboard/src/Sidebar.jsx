@@ -26,11 +26,23 @@ function Sidebar({ view, setView, theme, onToggleTheme }) {
   ];
   return (
     <div style={{ width: 64, background: "var(--bg-elevated)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 14, flexShrink: 0 }}>
-      <div style={{ width: 40, height: 40, borderRadius: 12, background: "linear-gradient(135deg,#6366f1,#818cf8)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20, boxShadow: "0 4px 12px rgba(99,102,241,0.3)" }}>
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-          <path d="M10 2L18 7V13L10 18L2 13V7L10 2Z" fill="white" opacity="0.9" />
-          <path d="M10 7L14 9.5V14L10 16.5L6 14V9.5L10 7Z" fill="#6366f1" />
-        </svg>
+      {/* mle-beast logo — gravitational-waves visualization w/ binary
+          black holes. The source image is wider than tall, so object-
+          fit: cover keeps the black holes (which sit dead-center)
+          visible. Drop shadow preserved from the previous SVG cube
+          for visual continuity. */}
+      <div style={{
+        width: 40, height: 40, borderRadius: 12,
+        overflow: "hidden",
+        marginBottom: 20,
+        boxShadow: "0 4px 12px rgba(99,102,241,0.3)",
+        background: "#000",
+      }}>
+        <img
+          src="/logo.jpg"
+          alt="mle-beast"
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+        />
       </div>
       {items.map(item => {
         const active = view === item.key || (item.key === "list" && view === "detail");
@@ -67,7 +79,7 @@ function Sidebar({ view, setView, theme, onToggleTheme }) {
           </svg>
         )}
       </button>
-      <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ade80", marginBottom: 10, boxShadow: "0 0 10px rgba(74,222,128,0.4)" }} />
+      <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--status-ok-fg)", marginBottom: 10, boxShadow: "0 0 10px rgba(74,222,128,0.4)" }} />
       <div style={{ writingMode: "vertical-rl", fontSize: 8, fontWeight: 800, letterSpacing: "2.5px", color: "var(--text-faint)", fontFamily: "'JetBrains Mono',monospace", marginBottom: 16 }}>BEAST</div>
     </div>
   );

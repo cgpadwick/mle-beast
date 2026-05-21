@@ -80,7 +80,7 @@ function LLMCallCard({ call, runStart, defaultExpanded }) {
           ))}
 
           {/* Response */}
-          <div style={{ fontSize: 9, fontWeight: 700, color: "#22d3ee", letterSpacing: "1.5px", fontFamily: "'JetBrains Mono',monospace", marginTop: 12, marginBottom: 6 }}>RESPONSE</div>
+          <div style={{ fontSize: 9, fontWeight: 700, color: "var(--accent-info)", letterSpacing: "1.5px", fontFamily: "'JetBrains Mono',monospace", marginTop: 12, marginBottom: 6 }}>RESPONSE</div>
           <div style={{
             fontSize: 11, lineHeight: 1.6,
             fontFamily: "'JetBrains Mono',monospace",

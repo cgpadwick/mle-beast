@@ -40,19 +40,23 @@ function RunsListView({ onOpen, onNew }) {
           display: "flex", alignItems: "center",
           gap: 20, padding: "0 28px", height: "100%",
         }}>
-          {/* Left: text cluster (cube + mle-beast wordmark + tagline) */}
+          {/* Left: logo + mle-beast wordmark + tagline. Logo is the
+              gravitational-waves visualization with binary black holes;
+              object-fit: cover keeps them visible at this aspect ratio.
+              Glow shadow kept from the prior gradient cube. */}
           <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
             <div style={{
               width: 56, height: 56, borderRadius: 14,
-              background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%)",
-              display: "flex", alignItems: "center", justifyContent: "center",
+              overflow: "hidden",
               boxShadow: "0 4px 16px rgba(139,92,246,0.5)",
+              background: "#000",
               flexShrink: 0,
             }}>
-              <svg width="32" height="32" viewBox="0 0 20 20" fill="none">
-                <path d="M10 2L18 7V13L10 18L2 13V7L10 2Z" fill="white" opacity="0.95" />
-                <path d="M10 7L14 9.5V14L10 16.5L6 14V9.5L10 7Z" fill="#6366f1" />
-              </svg>
+              <img
+                src="/logo.jpg"
+                alt="mle-beast"
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+              />
             </div>
 
             <div style={{ minWidth: 0, textAlign: "left" }}>
@@ -80,7 +84,7 @@ function RunsListView({ onOpen, onNew }) {
                 {liveCount > 0 && (
                   <>
                     <span style={{ color: "rgba(255,255,255,0.4)" }}>·</span>
-                    <span style={{ color: "#22d3ee", fontWeight: 700 }}>
+                    <span style={{ color: "var(--accent-info)", fontWeight: 700 }}>
                       {liveCount} active
                     </span>
                   </>
@@ -127,7 +131,7 @@ function RunsListView({ onOpen, onNew }) {
           <>
             {live.length > 0 && (
               <div style={{ marginBottom: 24 }}>
-                <SectionHeader label="Active" count={live.length} accent="#22d3ee" />
+                <SectionHeader label="Active" count={live.length} accent="var(--accent-info)" />
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))", gap: 10 }}>
                   {live.map(r => (
                     <RunCardLive key={r.id} run={r} onOpen={onOpen} />
@@ -170,7 +174,7 @@ function RunCardLive({ run, onOpen }) {
       {isRunning && (
         <div style={{
           position: "absolute", top: 0, left: 0, right: 0, height: 2,
-          background: "linear-gradient(90deg, transparent, #22d3ee, transparent)",
+          background: "linear-gradient(90deg, transparent, var(--accent-info), transparent)",
           backgroundSize: "200% 100%",
           animation: "shimmer 2s linear infinite",
         }} />
@@ -187,7 +191,7 @@ function RunCardLive({ run, onOpen }) {
       {peak && (
         <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
           <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "1.5px", color: "var(--text-faint)", fontFamily: "'JetBrains Mono',monospace" }}>BEST</span>
-          <span style={{ fontSize: 16, fontWeight: 700, color: "#22d3ee", fontFamily: "'JetBrains Mono',monospace" }}>
+          <span style={{ fontSize: 16, fontWeight: 700, color: "var(--accent-info)", fontFamily: "'JetBrains Mono',monospace" }}>
             {Number(peak.score).toFixed(4)}
           </span>
           <span style={{ fontSize: 9, color: "var(--text-faint)", fontFamily: "'JetBrains Mono',monospace" }}>
@@ -199,7 +203,7 @@ function RunCardLive({ run, onOpen }) {
         <span>{run.mode}</span>
         <span style={{ display: "flex", gap: 10 }}>
           {(run.total_cost_usd ?? 0) > 0 && (
-            <span style={{ color: "#fbbf24" }}>${Number(run.total_cost_usd).toFixed(2)}</span>
+            <span style={{ color: "var(--status-warn-fg)" }}>${Number(run.total_cost_usd).toFixed(2)}</span>
           )}
           <span>{fmtDuration(run.started_at, run.completed_at)}</span>
         </span>
@@ -233,7 +237,7 @@ function RunRowArchived({ run, onOpen, isLast }) {
       {/* Peak score column — empty when no kept-with-score experiments. */}
       <span style={{
         fontSize: 11, fontWeight: 700,
-        color: run.peak ? "#22d3ee" : "var(--text-faint)",
+        color: run.peak ? "var(--accent-info)" : "var(--text-faint)",
         fontFamily: "'JetBrains Mono',monospace", flexShrink: 0, width: 90,
         textAlign: "right",
       }}>

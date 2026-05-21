@@ -55,19 +55,22 @@ function PipelineIndicator({ stageMap, activeStageKey, selectedStage, onSelectSt
   const isActive = displayState === "active";
   const isFail = displayState === "fail";
 
+  // Text-on-translucent-tint colors: var(--text) and the new --status-*-fg
+  // vars give us automatic dark/light swap. Was hardcoded lights (white,
+  // #fca5a5, #86efac) — fine on near-black bg, low-contrast on near-white.
   let chipStyle;
   if (isActive) {
     chipStyle = {
       background: "linear-gradient(135deg,rgba(129,140,248,0.32),rgba(167,139,250,0.22))",
       border: "1.5px solid rgba(167,139,250,0.7)",
-      color: "#ffffff",
+      color: "var(--text)",
       boxShadow: "0 0 14px rgba(129,140,248,0.45)",
       animation: "pipeBreathe 2s ease-in-out infinite",
     };
   } else if (isFail) {
-    chipStyle = { background: "rgba(248,113,113,0.10)", border: "1.5px solid rgba(248,113,113,0.35)", color: "#fca5a5" };
+    chipStyle = { background: "rgba(248,113,113,0.10)", border: "1.5px solid rgba(248,113,113,0.35)", color: "var(--status-fail-fg)" };
   } else if (displayState === "pass") {
-    chipStyle = { background: "rgba(74,222,128,0.08)", border: "1.5px solid rgba(74,222,128,0.25)", color: "#86efac" };
+    chipStyle = { background: "rgba(74,222,128,0.08)", border: "1.5px solid rgba(74,222,128,0.25)", color: "var(--status-ok-fg)" };
   } else {
     chipStyle = { background: "var(--surface)", border: "1.5px solid var(--border)", color: "var(--text-subtle)" };
   }
@@ -93,8 +96,11 @@ function PipelineIndicator({ stageMap, activeStageKey, selectedStage, onSelectSt
         {isActive && (
           <span style={{
             width: 8, height: 8, borderRadius: "50%",
-            background: "#fafafa",
-            boxShadow: "0 0 8px rgba(255,255,255,0.9), 0 0 14px rgba(167,139,250,0.6)",
+            // Lavender dot + glow — reads on both themes. Previously
+            // a white dot with a white inner glow, which disappeared
+            // against the white dashboard bg in light mode.
+            background: "#818cf8",
+            boxShadow: "0 0 8px rgba(129,140,248,0.9), 0 0 14px rgba(167,139,250,0.6)",
             animation: "pipePulse 1.2s ease-in-out infinite",
           }} />
         )}
@@ -289,10 +295,14 @@ function PipelineDagPanel({ stageMap, activeStageKey, selectedStage, onSelectSta
               <stop offset="100%" stopColor="rgba(34,211,238,0.05)" />
             </linearGradient>
 
-            {/* Edge gradients */}
+            {/* Edge gradients — these stops now ride on theme-aware
+                text colors so a "main" edge isn't white-on-white in
+                light mode. (Currently the solid non-active edges
+                stroke directly with var(--text-muted); the gradient
+                is kept defensively for any future edge variant.) */}
             <linearGradient id="edgeMain" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%"   stopColor="rgba(255,255,255,0.55)" />
-              <stop offset="100%" stopColor="rgba(255,255,255,0.85)" />
+              <stop offset="0%"   stopColor="var(--text-subtle)" />
+              <stop offset="100%" stopColor="var(--text-muted)" />
             </linearGradient>
             <linearGradient id="edgeActive" x1="0" y1="0" x2="1" y2="0">
               <stop offset="0%"   stopColor="rgba(129,140,248,0.4)" />
@@ -315,7 +325,11 @@ function PipelineDagPanel({ stageMap, activeStageKey, selectedStage, onSelectSta
             {/* Arrowhead markers */}
             <marker id="arrowMain" viewBox="0 0 10 10" refX="9" refY="5"
                     markerWidth="6" markerHeight="6" orient="auto">
-              <path d="M0,0 L10,5 L0,10 z" fill="rgba(255,255,255,0.85)" />
+              {/* Arrowhead color matches the edge stroke (var(--text-muted))
+                  so it reads on both themes — white-on-white in light
+                  mode was the source of the "DAG looks like a disaster"
+                  feedback. */}
+              <path d="M0,0 L10,5 L0,10 z" fill="var(--text-muted)" />
             </marker>
             <marker id="arrowActive" viewBox="0 0 10 10" refX="9" refY="5"
                     markerWidth="6" markerHeight="6" orient="auto">
@@ -347,7 +361,7 @@ function PipelineDagPanel({ stageMap, activeStageKey, selectedStage, onSelectSta
                 fontFamily: "'JetBrains Mono', monospace",
                 fontWeight: 700,
                 letterSpacing: "1.5px",
-                fill: "rgba(255,255,255,0.4)",
+                fill: "var(--text-subtle)",
               }}
             >
               {h.label}
@@ -388,7 +402,9 @@ function PipelineDagPanel({ stageMap, activeStageKey, selectedStage, onSelectSta
               // Solid stroke (not a gradient) — horizontal gradients
               // collapse to nothing on vertical lines because the bbox has
               // zero width, which is why the shafts went invisible.
-              stroke = "rgba(255,255,255,0.75)";
+              // Theme-aware: light text on dark bg, dark text on light bg.
+              // Was hardcoded white-75% which was invisible on light mode.
+              stroke = "var(--text-muted)";
               marker = "url(#arrowMain)";
               strokeWidth = 2.25;
               dasharray = kind === "branch" ? "5 4" : "none";
@@ -420,29 +436,41 @@ function PipelineDagPanel({ stageMap, activeStageKey, selectedStage, onSelectSta
 
             let fill, stroke, textColor;
             if (isTerminal) {
-              fill = "rgba(255,255,255,0.04)";
-              stroke = "rgba(255,255,255,0.15)";
-              textColor = "rgba(255,255,255,0.45)";
+              // Was hardcoded white-alpha (4% / 15% / 45%) — invisible
+              // on light mode. Theme vars give us the same visual weight
+              // on either background.
+              fill = "var(--surface)";
+              stroke = "var(--border)";
+              textColor = "var(--text-subtle)";
             } else if (isActive) {
               fill = "url(#nodeActive)";
               stroke = "rgba(167,139,250,0.9)";
-              textColor = "#ffffff";
+              // Active text rides on a translucent lavender gradient. On
+              // dark the underlying bg is near-black → white text reads;
+              // on light the bg is near-white → dark text reads. Using
+              // var(--text) gives us both for free.
+              textColor = "var(--text)";
             } else if (isFail) {
               fill = "url(#nodeFail)";
               stroke = "rgba(248,113,113,0.55)";
-              textColor = "#fca5a5";
+              textColor = "var(--status-fail-fg)";
             } else if (isPass) {
               fill = "url(#nodePass)";
               stroke = "rgba(74,222,128,0.5)";
-              textColor = "#86efac";
+              textColor = "var(--status-ok-fg)";
             } else if (isSel) {
               fill = "url(#nodeSel)";
               stroke = "rgba(34,211,238,0.55)";
-              textColor = "#22d3ee";
+              textColor = "var(--accent-info)";
             } else {
-              fill = "rgba(255,255,255,0.04)";
-              stroke = "rgba(255,255,255,0.18)";
-              textColor = "rgba(255,255,255,0.6)";
+              // Idle node — was rgba(white, very-low-alpha). The 4%
+              // fill + 18% stroke was a faint card on dark; on light
+              // the equivalents are barely-visible page bg, exactly
+              // the "boxes are hard to see" feedback. Using vars
+              // gives us proper card-on-bg contrast either way.
+              fill = "var(--surface)";
+              stroke = "var(--border)";
+              textColor = "var(--text-muted)";
             }
 
             const cx = pos.x;
@@ -485,7 +513,10 @@ function PipelineDagPanel({ stageMap, activeStageKey, selectedStage, onSelectSta
                 />
                 {/* Status indicator on the left side */}
                 {!isTerminal && isActive && (
-                  <circle cx={x + 12} cy={cy} r={4} fill="#ffffff">
+                  // The "active" pulsing dot on the left of the node.
+                  // Was solid white — invisible on light mode. Lavender
+                  // matches the active-node accent and reads on both.
+                  <circle cx={x + 12} cy={cy} r={4} fill="#818cf8">
                     <animate attributeName="opacity" values="0.4;1;0.4"
                              dur="1.2s" repeatCount="indefinite" />
                   </circle>
@@ -521,10 +552,10 @@ function PipelineDagPanel({ stageMap, activeStageKey, selectedStage, onSelectSta
           })}
 
           {/* Branch labels */}
-          <text x={140} y={195} style={{ fontSize: 9, fill: "rgba(255,255,255,0.45)", fontFamily: "'JetBrains Mono',monospace" }}>
+          <text x={140} y={195} style={{ fontSize: 9, fill: "var(--text-subtle)", fontFamily: "'JetBrains Mono',monospace" }}>
             greenfield
           </text>
-          <text x={300} y={95} style={{ fontSize: 9, fill: "rgba(255,255,255,0.45)", fontFamily: "'JetBrains Mono',monospace" }}>
+          <text x={300} y={95} style={{ fontSize: 9, fill: "var(--text-subtle)", fontFamily: "'JetBrains Mono',monospace" }}>
             brownfield
           </text>
           <text x={DAG_W - 180} y={DAG_H - 20} style={{ fontSize: 9, fill: "rgba(251,191,36,0.65)", fontFamily: "'JetBrains Mono',monospace", fontWeight: 700 }}>
