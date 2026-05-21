@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import List, Optional
 
 from mle_beast.command_runner import run_command
+from mle_beast.safety import check_python_file_text, check_shell_command
+from mle_beast.safety.policy import log_block
 from mle_beast.workspace import WorkspaceRegistry
 
 
@@ -153,6 +155,17 @@ def _cap_raw(text: str) -> str:
 
 def run_shell_command(command: str, timeout: int = 30, max_chars: int = 4000) -> str:
     base_path, _, env = _get_workspace_env()
+
+    # Safety check the RAW command — before we wrap it with `. activate
+    # && …`. If we checked the wrapped form we'd false-positive on the
+    # activate path (which can legitimately be outside the workspace
+    # when a BYO env is in use), and we'd miss any tokens the user
+    # genuinely typed since they're now buried after the && operator.
+    decision = check_shell_command(command, workspace=base_path)
+    if not decision.allow:
+        log_block(command, decision, kind="shell", workspace=base_path)
+        return decision.as_error()
+
     try:
         # If the user supplied a BYO environment, source THAT activate
         # script. Otherwise source <workspace>/venv/bin/activate (the
@@ -195,6 +208,24 @@ def run_python_file(file_path: str, args: str = "", timeout: int = 30, max_chars
     full_path = base_path / file_path
     if not full_path.exists():
         return f"ERROR: File not found: {file_path}"
+
+    # Lint the script's TEXT for blocked tokens (e.g.
+    # `os.system("sudo …")`) before we shell out to python. Not an AST
+    # check — just a fast string scan that catches the obvious case of
+    # an agent dropping sudo-using code into a script it's about to run.
+    try:
+        script_text = full_path.read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        return f"ERROR: Could not read {file_path}: {e}"
+    decision = check_python_file_text(script_text)
+    if not decision.allow:
+        log_block(
+            f"{file_path}: {decision.reason}",
+            decision,
+            kind="python_file",
+            workspace=base_path,
+        )
+        return decision.as_error()
     # Add script's parent dir to PYTHONPATH so sibling imports work
     # (e.g., iterations/v1/train.py can do "from model import MyModel")
     script_dir = str(full_path.parent.absolute())
