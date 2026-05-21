@@ -281,7 +281,7 @@ function SettingsTab({ settings, numericTypes, provider, update, save, saving, s
         {savedMsg && (
           <span style={{
             fontSize: 11, fontFamily: "'JetBrains Mono',monospace",
-            color: savedMsg.ok ? "var(--status-ok-fg)" : "#fca5a5",
+            color: savedMsg.ok ? "var(--status-ok-fg)" : "var(--status-fail-fg)",
           }}>
             {savedMsg.msg}
           </span>
@@ -355,7 +355,7 @@ function AdminTab() {
   const danger = {
     background: "rgba(248,113,113,0.1)",
     border: "1px solid rgba(248,113,113,0.35)",
-    color: "#fca5a5", fontSize: 12, fontWeight: 600,
+    color: "var(--status-fail-fg)", fontSize: 12, fontWeight: 600,
     padding: "8px 16px", borderRadius: 8, cursor: busy ? "wait" : "pointer",
     opacity: busy ? 0.5 : 1,
   };
@@ -411,7 +411,7 @@ function AdminTab() {
 
       {/* Full reset */}
       <Card style={{ padding: 18, marginBottom: 12, borderColor: "rgba(248,113,113,0.25)" }}>
-        <div style={{ fontSize: 9, fontWeight: 700, color: "#fca5a5", letterSpacing: "1.5px", fontFamily: "'JetBrains Mono',monospace", marginBottom: 8 }}>
+        <div style={{ fontSize: 9, fontWeight: 700, color: "var(--status-fail-fg)", letterSpacing: "1.5px", fontFamily: "'JetBrains Mono',monospace", marginBottom: 8 }}>
           DANGER ZONE — RESET DATABASE
         </div>
         <div style={{ fontSize: 11, color: "var(--text-subtle)", marginBottom: 12 }}>
@@ -437,7 +437,7 @@ function AdminTab() {
       {msg && (
         <div style={{
           fontSize: 11, fontFamily: "'JetBrains Mono',monospace", marginTop: 14,
-          color: msg.ok ? "var(--status-ok-fg)" : "#fca5a5",
+          color: msg.ok ? "var(--status-ok-fg)" : "var(--status-fail-fg)",
         }}>
           {msg.txt}
         </div>
