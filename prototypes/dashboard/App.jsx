@@ -34,7 +34,31 @@ export default function App() {
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
         {/* Top-right utility cluster — theme toggle + gear. Both are
             fixed-position so they stay reachable from any view without
-            the underlying layout needing to make room. */}
+            the underlying layout needing to make room.
+
+            Two-context styling:
+              - On the runs list view, the cluster sits on top of the
+                hero banner, which is hardcoded `backgroundColor: "#000"`
+                in BOTH themes (design choice — the gravitational-waves
+                photo needs the dark canvas). So in light mode the
+                normally-dark buttons would vanish on the black hero.
+                When view === "list" we force the "dark context" style
+                (light frosted button on dark) regardless of theme.
+              - On every other view (detail, new, settings) the cluster
+                is over the regular page bg and we use theme-aware
+                styling. */}
+        {(() => {
+        const onHero = view === "list";
+        const btnBg = onHero
+          ? "rgba(255,255,255,0.14)"
+          : (theme === "dark" ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.06)");
+        const btnBorder = onHero
+          ? "rgba(255,255,255,0.32)"
+          : (theme === "dark" ? "rgba(255,255,255,0.25)" : "rgba(15,23,42,0.20)");
+        const btnColor = onHero
+          ? "rgba(255,255,255,0.92)"
+          : (theme === "dark" ? "rgba(255,255,255,0.85)" : "rgba(15,23,42,0.75)");
+        return (
         <div style={{
           position: "absolute", top: 12, right: 16, zIndex: 10,
           display: "flex", alignItems: "center", gap: 8,
@@ -44,11 +68,13 @@ export default function App() {
             title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
             style={{
               width: 36, height: 36, borderRadius: 10,
-              border: "1px solid var(--border)", cursor: "pointer",
-              background: "var(--surface)",
-              color: "var(--text-muted)",
+              border: `1px solid ${btnBorder}`,
+              cursor: "pointer",
+              background: btnBg,
+              color: btnColor,
               display: "flex", alignItems: "center", justifyContent: "center",
               transition: "all 0.15s",
+              backdropFilter: "blur(8px)",
             }}
           >
             {theme === "dark" ? (
@@ -69,11 +95,13 @@ export default function App() {
             title="Settings &amp; Admin"
             style={{
               width: 36, height: 36, borderRadius: 10,
-              border: "1px solid var(--border)", cursor: "pointer",
-              background: view === "settings" ? "rgba(99,102,241,0.15)" : "var(--surface)",
-              color: view === "settings" ? "#a5b4fc" : "var(--text-muted)",
+              border: `1px solid ${btnBorder}`,
+              cursor: "pointer",
+              background: view === "settings" ? "rgba(99,102,241,0.20)" : btnBg,
+              color: view === "settings" ? "#a5b4fc" : btnColor,
               display: "flex", alignItems: "center", justifyContent: "center",
               transition: "all 0.15s",
+              backdropFilter: "blur(8px)",
             }}
           >
             {/* Proper gear icon (Lucide "settings"). 8 lobes + center
@@ -87,8 +115,10 @@ export default function App() {
             </svg>
           </button>
         </div>
+        );
+        })()}
 
-        {view === "list" && <RunsListView onOpen={open} onNew={() => setView("new")} />}
+        {view === "list" && <RunsListView onOpen={open} onNew={() => setView("new")} onHome={() => setView("list")} />}
         {view === "new" && <NewRunView onCreated={open} onCancel={() => setView("list")} />}
         {view === "detail" && currentRunId && <RunDetailView runId={currentRunId} onBack={() => setView("list")} />}
         {view === "settings" && <SettingsView onClose={() => setView("list")} />}

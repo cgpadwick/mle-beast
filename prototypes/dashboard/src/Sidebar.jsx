@@ -30,20 +30,28 @@ function Sidebar({ view, setView }) {
           black holes. The source image is wider than tall, so object-
           fit: cover keeps the black holes (which sit dead-center)
           visible. Drop shadow preserved from the previous SVG cube
-          for visual continuity. */}
-      <div style={{
-        width: 40, height: 40, borderRadius: 12,
-        overflow: "hidden",
-        marginBottom: 20,
-        boxShadow: "0 4px 12px rgba(99,102,241,0.3)",
-        background: "#000",
-      }}>
+          for visual continuity. Click → navigate to the launch page
+          (runs list), the standard "logo is home" convention. */}
+      <button
+        onClick={() => setView("list")}
+        title="Go to runs list"
+        style={{
+          width: 40, height: 40, borderRadius: 12,
+          overflow: "hidden",
+          marginBottom: 20,
+          boxShadow: "0 4px 12px rgba(99,102,241,0.3)",
+          background: "#000",
+          border: "none",
+          padding: 0,
+          cursor: "pointer",
+        }}
+      >
         <img
           src="/logo.jpg"
           alt="mle-beast"
           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
         />
-      </div>
+      </button>
       {items.map(item => {
         const active = view === item.key || (item.key === "list" && view === "detail");
         return (

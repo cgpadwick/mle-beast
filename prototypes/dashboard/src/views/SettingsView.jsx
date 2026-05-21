@@ -158,7 +158,11 @@ function SettingsView({ onClose }) {
 
   return (
     <div style={{ flex: 1, overflow: "auto", padding: "24px 28px", maxWidth: 920 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+      {/* Right-padding leaves room for the absolute-positioned cluster
+          (theme toggle + gear) in App.jsx that anchors at right:16
+          and is ~80px wide. Without this offset the cluster sat on
+          top of the `← back` button and made it invisible. */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, paddingRight: 96 }}>
         <div>
           <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Settings</h2>
           <div style={{ fontSize: 11, color: "var(--text-subtle)" }}>

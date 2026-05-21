@@ -6,7 +6,7 @@ import { cardBase } from "../constants.js";
 import { Card, StatusPill, SectionHeader } from "../primitives.jsx";
 import { fmtDuration, fmtScore, fmtTokens } from "../format.js";
 
-function RunsListView({ onOpen, onNew }) {
+function RunsListView({ onOpen, onNew, onHome }) {
   const [runs, setRuns] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -43,21 +43,31 @@ function RunsListView({ onOpen, onNew }) {
           {/* Left: logo + mle-beast wordmark + tagline. Logo is the
               gravitational-waves visualization with binary black holes;
               object-fit: cover keeps them visible at this aspect ratio.
-              Glow shadow kept from the prior gradient cube. */}
+              Glow shadow kept from the prior gradient cube. Click →
+              navigate to launch page (no-op when already here, but
+              keeps the "logo is home" affordance consistent with the
+              sidebar logo). */}
           <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
-            <div style={{
-              width: 56, height: 56, borderRadius: 14,
-              overflow: "hidden",
-              boxShadow: "0 4px 16px rgba(139,92,246,0.5)",
-              background: "#000",
-              flexShrink: 0,
-            }}>
+            <button
+              onClick={onHome}
+              title="Go to runs list"
+              style={{
+                width: 56, height: 56, borderRadius: 14,
+                overflow: "hidden",
+                boxShadow: "0 4px 16px rgba(139,92,246,0.5)",
+                background: "#000",
+                flexShrink: 0,
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+              }}
+            >
               <img
                 src="/logo.jpg"
                 alt="mle-beast"
                 style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
               />
-            </div>
+            </button>
 
             <div style={{ minWidth: 0, textAlign: "left" }}>
               <h1 style={{
