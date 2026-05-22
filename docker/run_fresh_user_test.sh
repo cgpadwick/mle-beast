@@ -76,8 +76,17 @@ step 3 "mle-beast init --check (diagnose only)"
 # `init --check` is EXPECTED to return 1 here because poetry isn't
 # installed yet (we install it in step 4). Any other non-zero exit
 # is a real failure though, so cap the tolerated rc set explicitly.
-mle-beast init --check 2>&1 | tee "$LOGS/03_init_check.log" || true
+#
+# IMPORTANT: capture PIPESTATUS via `set +e ... set -e` rather than
+# `cmd | tee … || true; rc=${PIPESTATUS[0]}`. The `|| true` form makes
+# `|| true` the LAST command in the line, which replaces PIPESTATUS
+# with `(0)` — masking the pipx command's real exit code. We caught
+# this previously when the testbed proudly reported "rc=0" for an
+# init --check that actually returned 1.
+set +e
+mle-beast init --check 2>&1 | tee "$LOGS/03_init_check.log"
 rc=${PIPESTATUS[0]}
+set -e
 if [ "$rc" -gt 1 ]; then
   fail "init --check exited unexpectedly with $rc (expected 0 or 1)"
 fi
@@ -139,14 +148,18 @@ echo "Using venv python: $VENV_PY"
 
 cd "$REPO"
 START=$(date +%s)
-# Opt out of `set -e` for the pytest call itself — pytest's exit
-# code drives the test's pass/fail decision (and the fail branch
-# below already calls `exit $RC` if non-zero). Without the `|| true`
-# guard, `set -e` would short-circuit before we even get to log the
-# diagnostic tail of the pytest log.
+# Capture pytest's exit code so we can print the diagnostic tail
+# below before exiting. Use `set +e ... set -e` for the same reason
+# documented at step 3 — appending `|| true` would mask the real rc
+# via PIPESTATUS pointing at the `true` (which always exits 0).
+# Pytest's stdout/stderr is redirected to a file (no pipeline), but
+# stick with the same idiom for consistency and to keep the rc
+# capture pattern uniform across the script.
+set +e
 "$VENV_PY" -m pytest tests/integration/test_churn_quick.py -m integration -v -s \
-    > "$LOGS/05_pytest_run.log" 2>&1 || true
-RC=${PIPESTATUS[0]}
+    > "$LOGS/05_pytest_run.log" 2>&1
+RC=$?
+set -e
 END=$(date +%s)
 DUR=$((END - START))
 
