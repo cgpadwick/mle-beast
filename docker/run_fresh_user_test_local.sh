@@ -1,8 +1,14 @@
 #!/bin/bash
-# Host-side driver: build the Ubuntu 22.04 fresh-user image, run it with
-# GPU access + API key, capture logs to /tmp/fresh-user-logs/.
+# Host-side driver: build a fresh-user Docker image, run it with GPU
+# access + API key, capture per-step logs to /tmp/fresh-user-logs/<distro>/.
 #
-# Run from the repo root:  ./docker/run_fresh_user_test_local.sh
+# Distro selection via DISTRO env var (defaults to ubuntu2204):
+#   ./docker/run_fresh_user_test_local.sh                 # 22.04
+#   DISTRO=ubuntu2404 ./docker/run_fresh_user_test_local.sh  # 24.04
+#
+# Run from the repo root so the build context picks up the whole
+# source tree (the .dockerignore at the root filters out the heavy
+# stuff like node_modules / .git).
 
 set -euo pipefail
 

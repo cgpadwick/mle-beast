@@ -31,10 +31,12 @@ RUN apt-get update && \
         python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Ubuntu 24.04 ships with a default `ubuntu` user (UID 1000). Reuse
-# that rather than create a new one — keeps the test environment
-# closer to what a real WSL2 user would have. The `mlebeast` group/
-# user from the 22.04 variant doesn't exist here.
+# Ubuntu 24.04 ships with a default `ubuntu` user already occupying
+# UID 1000. We delete it and recreate as `mlebeast` so the user
+# account name matches the 22.04 image (keeps test scripts portable
+# across distros — same paths, same prompt, same home dir). The
+# `|| true` covers the case where useradd already exists if the
+# Dockerfile is rebuilt against a cached layer.
 RUN userdel -r ubuntu 2>/dev/null || true && \
     useradd -m -s /bin/bash mlebeast
 

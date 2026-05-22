@@ -10,8 +10,16 @@
 #
 # Bind a host dir at /home/mlebeast/logs to capture per-step logs.
 
-set -u
-set -o pipefail
+# -e: bail on any unhandled non-zero exit so a failing step doesn't
+#     silently let later "OK" lines paint a misleading green picture.
+# -u: catch undefined env vars (e.g. typoing OPENROUTER_API_KEY).
+# pipefail: a failure inside a `cmd | tee` pipeline propagates as the
+#     pipeline's exit code instead of being masked by tee succeeding.
+# Specific commands that we EXPECT might exit non-zero (e.g.
+# `mle-beast init --check` returns 1 when prereqs are missing, which
+# is normal for our first run before poetry is installed) get an
+# explicit `|| true` to opt out of -e on a case-by-case basis.
+set -euo pipefail
 
 REPO=/home/mlebeast/mle-beast
 LOGS=/home/mlebeast/logs
@@ -65,8 +73,15 @@ ok "mle-beast command installed"
 
 # ----------------------------------------------------------------
 step 3 "mle-beast init --check (diagnose only)"
-mle-beast init --check 2>&1 | tee "$LOGS/03_init_check.log"
-ok "init --check completed (poetry may be missing — init --yes installs it)"
+# `init --check` is EXPECTED to return 1 here because poetry isn't
+# installed yet (we install it in step 4). Any other non-zero exit
+# is a real failure though, so cap the tolerated rc set explicitly.
+mle-beast init --check 2>&1 | tee "$LOGS/03_init_check.log" || true
+rc=${PIPESTATUS[0]}
+if [ "$rc" -gt 1 ]; then
+  fail "init --check exited unexpectedly with $rc (expected 0 or 1)"
+fi
+ok "init --check completed (rc=$rc; rc=1 means poetry missing — init --yes installs it)"
 
 # ----------------------------------------------------------------
 step 4 "mle-beast init --yes (scaffolds project; installs poetry if missing)"
@@ -124,9 +139,14 @@ echo "Using venv python: $VENV_PY"
 
 cd "$REPO"
 START=$(date +%s)
+# Opt out of `set -e` for the pytest call itself — pytest's exit
+# code drives the test's pass/fail decision (and the fail branch
+# below already calls `exit $RC` if non-zero). Without the `|| true`
+# guard, `set -e` would short-circuit before we even get to log the
+# diagnostic tail of the pytest log.
 "$VENV_PY" -m pytest tests/integration/test_churn_quick.py -m integration -v -s \
-    > "$LOGS/05_pytest_run.log" 2>&1
-RC=$?
+    > "$LOGS/05_pytest_run.log" 2>&1 || true
+RC=${PIPESTATUS[0]}
 END=$(date +%s)
 DUR=$((END - START))
 
