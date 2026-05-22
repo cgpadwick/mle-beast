@@ -251,10 +251,22 @@ def llm_parse_val_score(
     return parse_val_score(log_content), direction
 
 
+# Synthetic identity used for all git commits the pipeline makes inside
+# the workspace. Without this, a fresh-user box that hasn't run
+# `git config --global user.email/user.name` would have every pipeline
+# commit fail with `fatal: empty ident name not allowed`. The `-c`
+# flags scope the override to the single invocation — the user's
+# global config is untouched.
+_GIT_IDENTITY_FLAGS = (
+    "-c", "user.email=mle-beast@noreply.local",
+    "-c", "user.name=mle-beast",
+)
+
+
 def _git(workspace: str | Path, *args: str) -> str:
     """Run a git command in the workspace directory. Returns stdout."""
     result = subprocess.run(
-        ["git", *args],
+        ["git", *_GIT_IDENTITY_FLAGS, *args],
         cwd=str(workspace),
         capture_output=True,
         text=True,
@@ -270,7 +282,7 @@ def _git_run(workspace: str | Path, *args: str) -> tuple[int, str, str]:
     the caller needs to distinguish success from failure.
     """
     result = subprocess.run(
-        ["git", *args],
+        ["git", *_GIT_IDENTITY_FLAGS, *args],
         cwd=str(workspace),
         capture_output=True,
         text=True,

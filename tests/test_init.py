@@ -397,6 +397,38 @@ def test_init_check_mode_does_not_write_files(tmp_path):
     assert not (tmp_path / "AGENTS.md").exists()
 
 
+def test_init_check_mode_never_offers_to_install_poetry(tmp_path):
+    """--check is diagnose-only by contract — it must never try to
+    install anything, even in interactive mode. Regression test for
+    a bug caught during Ubuntu 22.04 fresh-user testing where the
+    poetry install prompt fired BEFORE the --check short-circuit,
+    EOF'ing in non-interactive contexts (CI, Docker, headless boxes)."""
+    install_calls = []
+
+    def fake_install(p, yes):
+        install_calls.append((p, yes))
+        return False
+
+    with patch.object(init_mod, "_try_install_poetry", fake_install), \
+         patch.object(init_mod, "_check_prereqs", return_value=init_mod.PrereqResult(
+             python_ok=True,
+             python_version="3.10.99",
+             poetry_ok=False,     # the trigger — poetry is missing
+             git_ok=True,
+             pipx_ok=True,
+         )):
+        with patch.dict(os.environ, {"PATH": os.environ.get("PATH", "")}, clear=True):
+            rc = init_mod.run_init(["--cwd", str(tmp_path), "--check"])
+
+    # rc is 1 because poetry isn't installed (the check FAILS), but
+    # we MUST NOT have attempted to install it.
+    assert rc == 1, "rc should be 1 when prereqs aren't all green"
+    assert install_calls == [], (
+        "_try_install_poetry must NOT be called in --check mode "
+        "(diagnose-only contract)"
+    )
+
+
 # ----------------------------------------------------------------
 # MLE_BEAST_PROVIDER respected by llm._detect_provider
 # ----------------------------------------------------------------

@@ -630,6 +630,19 @@ def run_init(argv: list[str]) -> int:
         print()
         print(_bad("Python 3.10+ is required. Upgrade Python and re-run."))
         return 2
+
+    # --check is diagnose-only by contract. Return BEFORE any action
+    # (install offer, file scaffold, etc.). Previously the install
+    # prompt for missing poetry ran first, which broke `--check` in
+    # non-interactive contexts (CI, Docker, headless servers) — the
+    # `Install poetry? [Y/n]` prompt EOF'd on missing stdin.
+    if args.check:
+        if not pre.poetry_ok:
+            _line(_dim("→"), "poetry missing; rerun without --check for an interactive install offer.")
+        if not pre.git_ok:
+            _line(_dim("→"), "git missing; install via your system package manager.")
+        return 0 if (pre.python_ok and pre.poetry_ok and pre.git_ok) else 1
+
     if not pre.poetry_ok:
         installed = _try_install_poetry(pre, yes=args.yes)
         if installed:
@@ -639,9 +652,6 @@ def run_init(argv: list[str]) -> int:
         # fast with the clear message we already wrote into workspace.py.
     if not pre.git_ok:
         _line(" ", _dim("Install git via your system package manager and re-run."))
-
-    if args.check:
-        return 0 if (pre.python_ok and pre.poetry_ok and pre.git_ok) else 1
 
     # ---- 2. provider selection ---------------------------------------
     _header("LLM provider")
