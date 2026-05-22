@@ -1,0 +1,52 @@
+# Fresh-user simulation: Ubuntu 24.04 + CUDA 12.6.
+# Same shape as the 22.04 variant — different base image only.
+# Diffs between distros surface as: different apt package names,
+# different Python default version (22.04 ships 3.10, 24.04 ships 3.12),
+# different pipx behavior, different system libs.
+#
+# Build: docker build -f docker/Dockerfile.fresh-user-ubuntu2404 -t mle-beast-freshtest:2404 .
+# Run:   DISTRO=ubuntu2404 ./docker/run_fresh_user_test_local.sh
+
+FROM nvidia/cuda:12.6.0-base-ubuntu24.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Same prereq set as the 22.04 image. On Ubuntu 24.04 these resolve
+# to slightly different versions (Python 3.12 instead of 3.10) which
+# is itself part of what we're testing.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+        python3 \
+        python3-pip \
+        python3-venv \
+        pipx \
+        build-essential \
+        python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Ubuntu 24.04 ships with a default `ubuntu` user already occupying
+# UID 1000. We delete it and recreate as `mlebeast` so the user
+# account name matches the 22.04 image (keeps test scripts portable
+# across distros — same paths, same prompt, same home dir). The
+# `|| true` covers the case where useradd already exists if the
+# Dockerfile is rebuilt against a cached layer.
+RUN userdel -r ubuntu 2>/dev/null || true && \
+    useradd -m -s /bin/bash mlebeast
+
+USER mlebeast
+WORKDIR /home/mlebeast
+
+ENV PATH=/home/mlebeast/.local/bin:$PATH
+
+COPY --chown=mlebeast:mlebeast . /home/mlebeast/mle-beast
+COPY --chown=mlebeast:mlebeast docker/run_fresh_user_test.sh /home/mlebeast/run.sh
+RUN chmod +x /home/mlebeast/run.sh
+
+ENTRYPOINT ["/home/mlebeast/run.sh"]

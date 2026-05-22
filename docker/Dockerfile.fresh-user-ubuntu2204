@@ -1,0 +1,62 @@
+# Fresh-user simulation: Ubuntu 22.04 + CUDA 12.6, the bare minimum a real
+# user would have on their box. Anything beyond what's installed here is
+# something our README needs to document (or our install logic needs to
+# install). Use this as a litmus test for "does mle-beast work for a
+# stranger on a clean machine?"
+#
+# Build:  docker build -f docker/Dockerfile.fresh-user-ubuntu2204 -t mle-beast-freshtest:2204 .
+# Run:    see docker/run_fresh_user_test.sh
+
+FROM nvidia/cuda:12.6.0-base-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Bare-minimum prereqs. Deliberately matches what the README's "Install"
+# section names — if a user does `apt install git curl python3 python3-pip
+# python3-venv pipx` on a fresh box, what do they have?
+#
+# Extras beyond the README that we include:
+#   - ca-certificates: pipx/pip need it for HTTPS downloads. On Ubuntu
+#     base images this isn't always pulled in by default.
+#   - build-essential, python3-dev: torch wheels are prebuilt but other
+#     transitive deps may need a C compiler. Including these so the
+#     test doesn't fail on an obscure compile.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+        python3 \
+        python3-pip \
+        python3-venv \
+        pipx \
+        build-essential \
+        python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Run as a non-root user — pipx warns when used as root, and we want to
+# mimic the actual user's environment as closely as possible.
+RUN useradd -m -s /bin/bash mlebeast
+USER mlebeast
+WORKDIR /home/mlebeast
+
+# Ensure pipx-installed binaries land on PATH. pipx ensurepath edits
+# .bashrc, but Docker doesn't source .bashrc for ENTRYPOINT-style runs
+# so we set PATH explicitly.
+ENV PATH=/home/mlebeast/.local/bin:$PATH
+
+# Copy the entire mle-beast repo into the image. .dockerignore at the
+# repo root strips heavy / irrelevant paths (node_modules, .git,
+# __pycache__, etc.) so this layer stays under ~10 MB.
+COPY --chown=mlebeast:mlebeast . /home/mlebeast/mle-beast
+
+# Test driver — separate file so we can iterate on the test steps
+# without rebuilding the rest of the image.
+COPY --chown=mlebeast:mlebeast docker/run_fresh_user_test.sh /home/mlebeast/run.sh
+RUN chmod +x /home/mlebeast/run.sh
+
+ENTRYPOINT ["/home/mlebeast/run.sh"]

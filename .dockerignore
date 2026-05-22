@@ -1,0 +1,43 @@
+# Keep Docker build context lean — these paths are either huge, irrelevant,
+# or actively wrong to ship inside the fresh-user test image.
+.git
+.gitignore
+.github
+
+# Frontend build artifacts. The dashboard's React bundle ships as static
+# files in src/mle_beast/web/static; we keep those (the user-install path
+# uses them at runtime) but exclude the source build deps.
+prototypes/dashboard/node_modules
+prototypes/dashboard/dist
+
+# Python caches
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/.coverage
+**/.mypy_cache
+
+# Editable install / venv artifacts
+.venv
+venv
+*.egg-info
+build
+dist
+
+# Personal / temp
+**/.DS_Store
+**/Thumbs.db
+*.log
+bench-run
+test-run
+
+# IDE
+.vscode
+.idea
+.cursor
+
+# Docker itself shouldn't ship copies of the docker dir's intermediate
+# results — but Dockerfile + run script obviously need to be in the
+# build context, so this is just for stuff I may add later.
+docker/_build_cache

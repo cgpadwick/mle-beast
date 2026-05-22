@@ -433,3 +433,79 @@ class TestReportNode:
 
         assert action == "complete"
         assert (workspace / "REPORT.md").exists()
+
+
+# ----------------------------------------------------------------
+# Regression: git commits must work without global user.email/user.name
+# ----------------------------------------------------------------
+
+class TestGitIdentityFlags:
+    """The pipeline's `_git` helper must inject `-c user.email=...
+    -c user.name=...` so commits succeed on a fresh-user machine that
+    hasn't run `git config --global user.email/user.name`. Regression
+    test for the bug caught during Ubuntu 22.04 fresh-user docker test
+    (where every pipeline commit emitted `fatal: empty ident name`
+    warnings)."""
+
+    def test_git_helper_injects_identity_flags(self, monkeypatch):
+        """_git() and _git_run() should both prefix the subprocess argv
+        with `-c user.email=... -c user.name=...` so the user's global
+        config isn't required."""
+        from mle_beast import hillclimb as hc
+
+        captured_args = []
+
+        class _FakeResult:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        def fake_run(cmd, **kwargs):
+            captured_args.append(list(cmd))
+            return _FakeResult()
+
+        monkeypatch.setattr(hc.subprocess, "run", fake_run)
+
+        hc._git("/tmp/whatever", "commit", "-m", "test")
+        hc._git_run("/tmp/whatever", "commit", "-m", "test")
+
+        for argv in captured_args:
+            # argv = ["git", "-c", "user.email=...", "-c", "user.name=...", "commit", ...]
+            assert argv[0] == "git"
+            joined = " ".join(argv)
+            assert "-c user.email=" in joined, f"missing user.email -c flag in {argv}"
+            assert "-c user.name=" in joined, f"missing user.name -c flag in {argv}"
+            # And the original command must still be there
+            assert "commit" in argv
+            assert "test" in argv
+
+    def test_git_commit_succeeds_without_global_config(self, tmp_path, monkeypatch):
+        """End-to-end: in a workspace where global git config has no
+        user.email/user.name, the pipeline's _git helper should still
+        be able to commit. Uses HOME override so the test sees no
+        global config regardless of the dev's actual ~/.gitconfig."""
+        from mle_beast import hillclimb as hc
+
+        # Empty HOME → no .gitconfig → no global identity.
+        clean_home = tmp_path / "clean-home"
+        clean_home.mkdir()
+        monkeypatch.setenv("HOME", str(clean_home))
+        # XDG and GIT_CONFIG_GLOBAL can override HOME — clear them too.
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+        monkeypatch.delenv("GIT_CONFIG_GLOBAL", raising=False)
+        # System config could still inject identity; on a typical Linux
+        # box it doesn't, but explicitly skip it to keep the test hermetic.
+        monkeypatch.setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        # init repo (no commits yet)
+        hc._git(workspace, "init", "-q")
+        (workspace / "hello.txt").write_text("hi\n")
+        hc._git(workspace, "add", "hello.txt")
+        # The actual moment of truth — commit without global config:
+        rc, _, stderr = hc._git_run(workspace, "commit", "-m", "from-pipeline")
+        assert rc == 0, (
+            f"git commit failed with no global identity (rc={rc}): {stderr!r}. "
+            "The _GIT_IDENTITY_FLAGS injection isn't working."
+        )
