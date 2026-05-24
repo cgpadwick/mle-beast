@@ -154,6 +154,19 @@ def register_routes(app: FastAPI) -> None:
             except RuntimeError as e:
                 raise HTTPException(status_code=400, detail=str(e)) from e
 
+        # When the user owns the workspace env (setup_workspace off, no BYO
+        # environment), the pipeline needs a venv at <workspace>/.venv. The
+        # runner checks this too, but only after the run starts — which the
+        # dashboard surfaces as a run that flips to "failed" a second after
+        # submit. Preflight it here so the New Run form gets an immediate
+        # 400 with the actionable "create a venv" message instead.
+        elif not req.setup_workspace:
+            from mle_beast.workspace import check_workspace_env
+            try:
+                check_workspace_env(req.workspace, mode=req.mode)
+            except RuntimeError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
+
         manager = get_run_manager()
         config = RunConfig(
             workspace=req.workspace,

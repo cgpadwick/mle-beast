@@ -263,6 +263,17 @@ class TestSpaMount:
 
 
 class TestRunsRoutes:
+    @pytest.fixture(autouse=True)
+    def _stub_workspace_check(self, monkeypatch):
+        # The create-run preflight calls check_workspace_env when the user
+        # owns the env (setup_workspace off, no BYO environment). These
+        # in-memory route tests have no real venv on disk, so no-op it by
+        # default. Tests that exercise the preflight re-patch it to raise.
+        monkeypatch.setattr(
+            "mle_beast.workspace.check_workspace_env",
+            lambda workspace, mode=None: None,
+        )
+
     def test_list_runs_empty(self, client):
         r = client.get("/api/runs")
         assert r.status_code == 200
@@ -317,6 +328,44 @@ class TestRunsRoutes:
         assert config.metric_name == "rmse"
         # environment defaults to None when not provided.
         assert config.environment is None
+
+    def test_create_run_preflights_workspace_venv(
+        self, client, fake_manager, monkeypatch,
+    ):
+        """setup_workspace off + no BYO environment → the route must
+        preflight the workspace's .venv. A missing venv returns 400 with
+        the actionable message and never reaches RunManager.create_run, so
+        the user sees an immediate form error instead of a run that flips
+        to 'failed' a second after submit.
+        """
+        def boom(workspace, mode=None):
+            raise RuntimeError(f"No venv found at {workspace}/.venv/bin/python.")
+
+        monkeypatch.setattr("mle_beast.workspace.check_workspace_env", boom)
+
+        r = client.post("/api/runs", json={"workspace": "/tmp/x", "task": "x"})
+        assert r.status_code == 400
+        assert "No venv found" in r.json()["detail"]
+        assert fake_manager.created == []
+
+    def test_create_run_skips_venv_preflight_when_setup_workspace(
+        self, client, fake_manager, monkeypatch,
+    ):
+        """setup_workspace on → mle-beast builds the venv itself, so the
+        route must NOT run the workspace-venv preflight.
+        """
+        def boom(workspace, mode=None):
+            raise AssertionError(
+                "check_workspace_env must not run when setup_workspace=True"
+            )
+
+        monkeypatch.setattr("mle_beast.workspace.check_workspace_env", boom)
+
+        r = client.post("/api/runs", json={
+            "workspace": "/tmp/x", "task": "x", "setup_workspace": True,
+        })
+        assert r.status_code == 201
+        assert len(fake_manager.created) == 1
 
     def test_create_run_preflights_environment(
         self, client, fake_manager, monkeypatch, tmp_path,
