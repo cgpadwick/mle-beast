@@ -20,13 +20,18 @@
 #              for the per-project setup.
 #
 # Non-interactive automation flags (Docker path):
-#   --yes / -y           Accept all defaults; no prompts.
-#   --openrouter-key=K   Set OPENROUTER_API_KEY in .env (skips prompt).
-#   --openai-key=K       Set OPENAI_API_KEY.
-#   --local-llm-url=URL  Set LOCAL_LLM_BASE_URL.
-#   --gpu / --no-gpu     Force GPU on/off (default: auto-detect).
-#   --port=N             Dashboard port (default: 8000).
-#   --tag=T              Image tag (default: edge).
+#   --yes / -y              Accept all defaults; no prompts.
+#   --openrouter-key=K      Set OPENROUTER_API_KEY in .env (skips prompt).
+#   --openai-key=K          Set OPENAI_API_KEY.
+#   --local-llm-url=URL     Set LOCAL_LLM_BASE_URL.
+#   --gpu / --no-gpu        Force GPU on/off (default: auto-detect).
+#   --port=N                Dashboard port (default: 8000).
+#   --tag=T                 Image tag (default: edge).
+#   --model=SLUG            Model slug (default: deepseek/deepseek-v4-flash).
+#   --data-dir=PATH         Where the host stores SQLite + settings
+#                           (default: ~/.mle-beast). ~/ is expanded.
+#   --workspaces-dir=PATH   Where the host stores per-run workspace dirs
+#                           (default: ~/mle-beast-runs).
 
 set -euo pipefail
 
@@ -80,19 +85,25 @@ LOCAL_LLM_URL=""
 GPU_PREF=""              # "yes" | "no" | "" (= auto-detect)
 PORT="$DEFAULT_PORT"
 TAG="$DEFAULT_TAG"
+MODEL=""                 # explicit slug; empty = ask (Docker) or defer (Native)
+DATA_DIR=""              # SQLite + settings location on host; "" = ask
+WORKSPACES_DIR=""        # per-run workspace dirs on host; "" = ask
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --docker)             PATH_CHOICE="docker" ;;
-    --native)             PATH_CHOICE="native" ;;
-    --yes|-y)             YES=true ;;
-    --openrouter-key=*)   OPENROUTER_KEY="${1#*=}" ;;
-    --openai-key=*)       OPENAI_KEY="${1#*=}" ;;
-    --local-llm-url=*)    LOCAL_LLM_URL="${1#*=}" ;;
-    --gpu)                GPU_PREF="yes" ;;
-    --no-gpu)             GPU_PREF="no" ;;
-    --port=*)             PORT="${1#*=}" ;;
-    --tag=*)              TAG="${1#*=}" ;;
+    --docker)              PATH_CHOICE="docker" ;;
+    --native)              PATH_CHOICE="native" ;;
+    --yes|-y)              YES=true ;;
+    --openrouter-key=*)    OPENROUTER_KEY="${1#*=}" ;;
+    --openai-key=*)        OPENAI_KEY="${1#*=}" ;;
+    --local-llm-url=*)     LOCAL_LLM_URL="${1#*=}" ;;
+    --gpu)                 GPU_PREF="yes" ;;
+    --no-gpu)              GPU_PREF="no" ;;
+    --port=*)              PORT="${1#*=}" ;;
+    --tag=*)               TAG="${1#*=}" ;;
+    --model=*)             MODEL="${1#*=}" ;;
+    --data-dir=*)          DATA_DIR="${1#*=}" ;;
+    --workspaces-dir=*)    WORKSPACES_DIR="${1#*=}" ;;
     -h|--help)
       sed -n '/^# mle-beast quickstart wizard\./,/^set -euo/p' "$0" | sed 's/^# \{0,1\}//; /^set -euo/d'
       exit 0 ;;
@@ -101,6 +112,14 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+# Expand ~ in user-supplied paths. Compose YAML doesn't expand $HOME,
+# so we resolve at script time and write absolute paths into the
+# generated compose. Run early in case --yes uses the defaults below
+# (which also use ~).
+expand_tilde() { printf '%s' "${1/#\~/$HOME}"; }
+[ -n "$DATA_DIR" ]       && DATA_DIR=$(expand_tilde "$DATA_DIR")
+[ -n "$WORKSPACES_DIR" ] && WORKSPACES_DIR=$(expand_tilde "$WORKSPACES_DIR")
 
 # --------------------------------------------------------------------
 # Banner
@@ -354,6 +373,52 @@ run_docker() {
       ;;
   esac
 
+  # ---- Model ----
+  # Skip if --model passed explicitly. Otherwise offer a provider-
+  # appropriate curated list — OpenRouter slugs are `provider/model`,
+  # OpenAI uses bare names, Local LLM defers to whatever the server
+  # serves up. Mirrors the picker pattern from `mle-beast init`.
+  if [ -z "$MODEL" ]; then
+    header "Model"
+    case "$provider" in
+      openrouter)
+        printf '    1) %sdeepseek/deepseek-v4-flash%s    cheap, fast (recommended)\n' "${C_BOLD}" "${C_RESET}"
+        printf '    2) %sopenai/gpt-4o-mini%s             cheap\n' "${C_BOLD}" "${C_RESET}"
+        printf '    3) %santhropic/claude-haiku-4-5%s    balanced\n' "${C_BOLD}" "${C_RESET}"
+        printf '    4) %santhropic/claude-sonnet-4-6%s   premium\n' "${C_BOLD}" "${C_RESET}"
+        printf '    5) %santhropic/claude-opus-4-7%s     premium-plus\n' "${C_BOLD}" "${C_RESET}"
+        printf '    6) [type your own slug]\n'
+        raw=$(ask "Choice" "1")
+        case "$raw" in
+          2) MODEL="openai/gpt-4o-mini" ;;
+          3) MODEL="anthropic/claude-haiku-4-5" ;;
+          4) MODEL="anthropic/claude-sonnet-4-6" ;;
+          5) MODEL="anthropic/claude-opus-4-7" ;;
+          6) MODEL=$(ask "Type model slug" "deepseek/deepseek-v4-flash") ;;
+          *) MODEL="deepseek/deepseek-v4-flash" ;;
+        esac
+        ;;
+      openai)
+        printf '    1) %sgpt-4o-mini%s    cheap (recommended)\n' "${C_BOLD}" "${C_RESET}"
+        printf '    2) %sgpt-4o%s          balanced\n' "${C_BOLD}" "${C_RESET}"
+        printf '    3) %sgpt-5-mini%s      premium\n' "${C_BOLD}" "${C_RESET}"
+        printf '    4) [type your own slug]\n'
+        raw=$(ask "Choice" "1")
+        case "$raw" in
+          2) MODEL="gpt-4o" ;;
+          3) MODEL="gpt-5-mini" ;;
+          4) MODEL=$(ask "Type model slug" "gpt-4o-mini") ;;
+          *) MODEL="gpt-4o-mini" ;;
+        esac
+        ;;
+      local)
+        # No curated list — local servers can be running anything.
+        MODEL=$(ask "Model slug (whatever your local server serves)" "local-model")
+        ;;
+    esac
+  fi
+  ok "Model: $MODEL"
+
   # ---- Port / tag ----
   header "Dashboard host port"
   PORT=$(ask "Port" "$PORT")
@@ -361,11 +426,32 @@ run_docker() {
   dim "  :edge tracks every main merge. :latest tracks tagged releases."
   TAG=$(ask "Tag" "$TAG")
 
+  # ---- Data + workspaces directories ----
+  # Host paths for the two bind mounts. Defaults put everything under
+  # the user's home dir so the cwd (often the repo or a temp project
+  # dir) stays uncluttered. Both prompts accept ~/ — expand_tilde
+  # resolves it before the compose file is generated since YAML
+  # doesn't expand $HOME.
+  header "Where to store data on the host"
+  dim "  The dashboard's SQLite DB + run history goes in the data dir."
+  dim "  Per-run workspace dirs (model.py, checkpoints, reports) go in"
+  dim "  the workspaces dir. Both default to your home for cleanliness;"
+  dim "  use ./.mle-beast and ./workspaces if you want them next to the"
+  dim "  compose file instead."
+  if [ -z "$DATA_DIR" ]; then
+    DATA_DIR=$(ask "Data dir (SQLite + settings)" "$HOME/.mle-beast")
+    DATA_DIR=$(expand_tilde "$DATA_DIR")
+  fi
+  if [ -z "$WORKSPACES_DIR" ]; then
+    WORKSPACES_DIR=$(ask "Workspaces dir (per-run artifacts)" "$HOME/mle-beast-runs")
+    WORKSPACES_DIR=$(expand_tilde "$WORKSPACES_DIR")
+  fi
+
   # ---- Write files ----
   header "Writing files to $(pwd)"
-  write_env_file "$provider" "$OPENROUTER_KEY" "$OPENAI_KEY" "$LOCAL_LLM_URL"
+  write_env_file "$provider" "$OPENROUTER_KEY" "$OPENAI_KEY" "$LOCAL_LLM_URL" "$MODEL"
   ok ".env"
-  write_compose_file "$provider" "$want_gpu" "$PORT" "$TAG"
+  write_compose_file "$provider" "$want_gpu" "$PORT" "$TAG" "$DATA_DIR" "$WORKSPACES_DIR"
   ok "docker-compose.yml"
 
   # Pre-create the bind-mount directories so the running user owns
@@ -374,15 +460,17 @@ run_docker() {
   # (uid 1000) can't write to them — every SQLite write fails with
   # EACCES and /api/runs returns HTTP 500. Caught during local
   # smoke testing of this script.
-  mkdir -p .mle-beast workspaces
-  ok "bind-mount directories (.mle-beast, workspaces) created with your UID"
+  mkdir -p "$DATA_DIR" "$WORKSPACES_DIR"
+  ok "bind-mount directories created"
+  dim "    Data:        $DATA_DIR"
+  dim "    Workspaces:  $WORKSPACES_DIR"
 
   # Ensure .gitignore covers .env if the cwd is a git repo
   if [ -d .git ] && [ ! -f .gitignore ]; then
-    printf '.env\n.mle-beast/\nworkspaces/\n' > .gitignore
+    printf '.env\n' > .gitignore
     ok ".gitignore (created)"
   elif [ -f .gitignore ] && ! grep -qx '\.env' .gitignore 2>/dev/null; then
-    printf '\n# Added by setup-mle-beast.sh\n.env\n.mle-beast/\nworkspaces/\n' >> .gitignore
+    printf '\n# Added by setup-mle-beast.sh\n.env\n' >> .gitignore
     ok ".gitignore (.env appended)"
   fi
 
@@ -410,7 +498,7 @@ run_docker() {
 # --------------------------------------------------------------------
 
 write_env_file() {
-  local provider="$1" or_key="$2" oa_key="$3" local_url="$4"
+  local provider="$1" or_key="$2" oa_key="$3" local_url="$4" model="$5"
   {
     printf '# Generated by setup-mle-beast.sh on %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf '# Used by docker-compose.yml — Compose substitutes ${VAR} from this file.\n'
@@ -421,15 +509,17 @@ write_env_file() {
       openai)      printf 'OPENAI_API_KEY=%s\n' "$oa_key" ;;
       local)       printf 'LOCAL_LLM_BASE_URL=%s\n' "$local_url" ;;
     esac
-    printf '# Override the model slug here if you want something other\n'
-    printf '# than the default (deepseek/deepseek-v4-flash):\n'
-    printf '# MLE_BEAST_MODEL=anthropic/claude-haiku-4-5\n'
+    # Pin the model the user picked in the wizard. The compose file
+    # falls back to the same default if this line is removed, so the
+    # user can also blank it later without breaking anything.
+    printf 'MLE_BEAST_MODEL=%s\n' "$model"
   } > .env
   chmod 600 .env 2>/dev/null || true
 }
 
 write_compose_file() {
   local provider="$1" want_gpu="$2" port="$3" tag="$4"
+  local data_dir="$5" workspaces_dir="$6"
   {
     printf '# Generated by setup-mle-beast.sh on %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf '# Edit .env to change provider keys / model. Edit this file\n'
@@ -458,9 +548,14 @@ write_compose_file() {
       printf '    extra_hosts:\n'
       printf '      - "host.docker.internal:host-gateway"\n'
     fi
+    # Use absolute paths so the bind mounts work regardless of where
+    # `docker compose up/down` is invoked from. (Compose's relative
+    # paths resolve against the compose file's dir, which is fine —
+    # but writing absolute here lets the user `mv` the compose file
+    # without breaking the mounts.)
     printf '    volumes:\n'
-    printf '      - ./.mle-beast:/home/mlebeast/.mle-beast\n'
-    printf '      - ./workspaces:/workspaces\n'
+    printf '      - %s:/home/mlebeast/.mle-beast\n' "$data_dir"
+    printf '      - %s:/workspaces\n' "$workspaces_dir"
     if [ "$want_gpu" = "yes" ]; then
       printf '    deploy:\n'
       printf '      resources:\n'
