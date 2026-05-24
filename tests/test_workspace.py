@@ -93,3 +93,104 @@ def test_greenfield_does_not_require_evaluate_py(tmp_path):
     _make_fake_venv(tmp_path, "exit 0")
     assert check_workspace_env(tmp_path, mode="greenfield") is None
     assert check_workspace_env(tmp_path) is None  # mode=None default
+
+
+# ----------------------------------------------------------------
+# _clone_ml_frameworks: bundled-cache fast path
+# ----------------------------------------------------------------
+
+class TestClonesMlFrameworksCache:
+    """Verify the Docker-bundle fast path: when
+    MLE_BEAST_ML_FRAMEWORKS_CACHE points at a pre-cloned dir,
+    WorkspaceCreator copies from there instead of going to git.
+    Regression test for the cache-aware path added alongside the
+    user-facing Docker image."""
+
+    def test_cache_path_used_when_env_set_and_dir_exists(self, tmp_path, monkeypatch):
+        from mle_beast.workspace import WorkspaceCreator
+
+        # Fake "bundled" ml-frameworks at a known location.
+        bundled = tmp_path / "bundled-ml-frameworks"
+        bundled.mkdir()
+        (bundled / "marker.txt").write_text("from-bundle\n")
+        (bundled / "stacks").mkdir()
+        (bundled / "stacks" / "pytorch-cu126").mkdir()
+        (bundled / "stacks" / "pytorch-cu126" / "pyproject.toml").write_text("# fake\n")
+
+        monkeypatch.setenv("MLE_BEAST_ML_FRAMEWORKS_CACHE", str(bundled))
+
+        ws = tmp_path / "workspace"
+        ws.mkdir()
+        creator = WorkspaceCreator(str(ws), quiet=True)
+
+        dest = ws / "ml-frameworks-venv"
+        creator._clone_ml_frameworks(dest)
+
+        # The cp succeeded with the marker file from our bundle, not
+        # something git would have produced.
+        assert (dest / "marker.txt").read_text() == "from-bundle\n"
+        assert (dest / "stacks" / "pytorch-cu126" / "pyproject.toml").exists()
+
+    def test_falls_back_to_git_clone_when_env_unset(self, tmp_path, monkeypatch):
+        """Native install (no Docker bundle) → env var unset → use git clone.
+        We don't actually do the network clone in the test — just verify
+        that the cache-detection branch is NOT taken when env is unset.
+        Mocks `_run` to intercept the would-be git clone."""
+        from mle_beast.workspace import WorkspaceCreator
+
+        monkeypatch.delenv("MLE_BEAST_ML_FRAMEWORKS_CACHE", raising=False)
+
+        ws = tmp_path / "workspace"
+        ws.mkdir()
+        creator = WorkspaceCreator(str(ws), quiet=True)
+
+        # Replace _run with a no-op stub so we can detect that it WAS
+        # called (i.e., the git-clone fallback fired, not the copy path).
+        called = {}
+
+        class _FakeResult:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        def fake_run(*args, **kwargs):
+            called["args"] = args
+            return _FakeResult()
+
+        creator._run = fake_run
+        dest = ws / "ml-frameworks-venv"
+        creator._clone_ml_frameworks(dest)
+
+        assert "args" in called, "git clone fallback should have run"
+        argv = called["args"][0]
+        assert "git" in argv and "clone" in argv, f"expected git clone in {argv}"
+
+    def test_cache_env_set_but_dir_missing_falls_back(self, tmp_path, monkeypatch):
+        """If MLE_BEAST_ML_FRAMEWORKS_CACHE points at a non-existent path,
+        don't crash — fall back to git clone. Catches the case where
+        someone exports the env var pointing at a path that doesn't
+        actually exist on their machine."""
+        from mle_beast.workspace import WorkspaceCreator
+
+        monkeypatch.setenv("MLE_BEAST_ML_FRAMEWORKS_CACHE", "/does/not/exist")
+
+        ws = tmp_path / "workspace"
+        ws.mkdir()
+        creator = WorkspaceCreator(str(ws), quiet=True)
+
+        called = {}
+
+        class _FakeResult:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        def fake_run(*args, **kwargs):
+            called["args"] = args
+            return _FakeResult()
+
+        creator._run = fake_run
+        dest = ws / "ml-frameworks-venv"
+        creator._clone_ml_frameworks(dest)
+
+        assert "args" in called, "should fall back to git clone when cache dir missing"

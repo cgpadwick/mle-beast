@@ -1,0 +1,71 @@
+# mle-beast Docker Compose — the primary "I just want to try it" path.
+#
+# Quick start:
+#   cp .env.example .env             # then edit .env with your API key
+#   docker compose up
+#   # → dashboard at http://localhost:8000
+#
+# This pulls the prebuilt image from ghcr.io/cgpadwick/mle-beast. The
+# image bundles ml-frameworks + pre-primed poetry cache so the first
+# greenfield run is fast (no 5+ GB PyPI fetch inside the container).
+#
+# Persistence:
+#   - ./.mle-beast/ on the host holds the SQLite DB + settings. Survives
+#     `docker compose down` so your run history doesn't disappear.
+#   - ./workspaces/ on the host holds the per-run workspace dirs (the
+#     agent's model.py / checkpoints / reports / etc.). You can `cd`
+#     into them from your host to grab a model or a report.
+
+services:
+  mle-beast:
+    image: ghcr.io/cgpadwick/mle-beast:latest
+    # To build from a local source checkout instead of pulling the
+    # published image, uncomment the next two lines. Useful when you're
+    # iterating on the mle-beast code itself; users picking the image
+    # off GHCR don't need this.
+    # build:
+    #   context: .
+
+    container_name: mle-beast
+    ports:
+      # Map host:container. Dashboard inside the container listens on
+      # 0.0.0.0:8000 (set in Dockerfile ENTRYPOINT). Change the LEFT
+      # number if port 8000 is taken on your host.
+      - "8000:8000"
+
+    environment:
+      # Your LLM provider key. Set in `.env` (see `.env.example`) —
+      # Docker Compose substitutes ${VAR} from the .env file
+      # automatically. Don't paste the key directly into this file
+      # (it would land in git).
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+
+      # Optional: model slug override. Default is deepseek/deepseek-v4-flash
+      # (cheap, fast, capable on ML tasks). Comment out or change in .env
+      # to try anthropic/claude-haiku-4-5, openai/gpt-4o-mini, etc.
+      MLE_BEAST_MODEL: ${MLE_BEAST_MODEL:-deepseek/deepseek-v4-flash}
+
+    volumes:
+      # SQLite DB + global settings. Persists run history across
+      # container restarts.
+      - ./.mle-beast:/home/mlebeast/.mle-beast
+      # Per-run workspace directories. You can ls/cat/grep these from
+      # the host to inspect what the agent did.
+      - ./workspaces:/workspaces
+
+    # GPU passthrough via the NVIDIA Container Toolkit. The host needs
+    # `nvidia-container-toolkit` (Linux) or Docker Desktop with WSL2
+    # GPU support enabled (Windows). For a CPU-only host, comment out
+    # this whole `deploy:` block — mle-beast will fall back to CPU
+    # automatically. Training will be slower but functional.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    # Optional: keep the container running across host reboots. Off by
+    # default so the user is in clear control of the lifecycle.
+    # restart: unless-stopped

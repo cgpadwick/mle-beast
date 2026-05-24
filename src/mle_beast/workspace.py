@@ -292,6 +292,21 @@ class WorkspaceCreator:
             shutil.rmtree(dest_dir)
         dest_dir.parent.mkdir(parents=True, exist_ok=True)
 
+        # Docker / pre-baked-bundle fast path. When the image ships a
+        # pre-cloned ml-frameworks at MLE_BEAST_ML_FRAMEWORKS_CACHE (see
+        # the user-facing Dockerfile), `cp -r` from there instead of
+        # going to the network. Saves ~30s + hundreds of MB of fetch on
+        # every workspace setup. Falls back to git clone if the cache
+        # env var isn't set or the path doesn't exist — keeps native
+        # installs working unchanged.
+        cache_env = os.environ.get("MLE_BEAST_ML_FRAMEWORKS_CACHE")
+        if cache_env:
+            cache_path = Path(cache_env).expanduser().resolve()
+            if cache_path.is_dir():
+                self._log(f"Copying ml-frameworks from bundled cache: {cache_path}")
+                shutil.copytree(cache_path, dest_dir, symlinks=True)
+                return dest_dir
+
         res = self._run(
             ["git", "clone", "--depth", "1", "--branch", "master",
              ML_FRAMEWORKS_REPO, str(dest_dir)],
