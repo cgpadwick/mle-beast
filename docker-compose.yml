@@ -1,0 +1,94 @@
+# mle-beast Docker Compose — the primary "I just want to try it" path.
+#
+# Quick start:
+#   cp .env.example .env             # then edit .env with your API key
+#   docker compose up
+#   # → dashboard at http://localhost:8000
+#
+# This pulls the prebuilt image from ghcr.io/cgpadwick/mle-beast. The
+# image bundles ml-frameworks + pre-primed poetry cache so the first
+# greenfield run is fast (no 5+ GB PyPI fetch inside the container).
+#
+# Persistence:
+#   - ./.mle-beast/ on the host holds the SQLite DB + settings. Survives
+#     `docker compose down` so your run history doesn't disappear.
+#   - ./workspaces/ on the host holds the per-run workspace dirs (the
+#     agent's model.py / checkpoints / reports / etc.). You can `cd`
+#     into them from your host to grab a model or a report.
+
+services:
+  mle-beast:
+    # `:edge` tracks the most recent merge to main (published by
+    # .github/workflows/docker-publish.yml on every push). After
+    # v0.1.0 is tagged, you can switch this to `:0.1.0` or `:latest`
+    # for the stable release. `:edge` is the right pick during the
+    # current pre-release window — it always exists once this PR
+    # merges, whereas `:latest` only appears after a v* tag is cut.
+    image: ghcr.io/cgpadwick/mle-beast:edge
+    # To build from a local source checkout instead of pulling the
+    # published image, uncomment the next two lines. Useful when you're
+    # iterating on the mle-beast code itself; users picking the image
+    # off GHCR don't need this.
+    # build:
+    #   context: .
+
+    container_name: mle-beast
+    ports:
+      # Map host:container. Dashboard inside the container listens on
+      # 0.0.0.0:8000 (set in Dockerfile ENTRYPOINT). Change the LEFT
+      # number if port 8000 is taken on your host.
+      - "8000:8000"
+
+    environment:
+      # LLM provider keys / config. Set whichever you use in `.env`
+      # (see `.env.example`) — Compose substitutes ${VAR} from `.env`
+      # automatically. The `:-` defaults to empty so an unset var
+      # doesn't break compose; mle-beast then ignores empty keys.
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LOCAL_LLM_BASE_URL: ${LOCAL_LLM_BASE_URL:-}
+      MLE_BEAST_PROVIDER: ${MLE_BEAST_PROVIDER:-}
+      # Default is deepseek/deepseek-v4-flash. Override in .env if you
+      # want anthropic/claude-haiku-4-5, openai/gpt-4o-mini, etc.
+      MLE_BEAST_MODEL: ${MLE_BEAST_MODEL:-deepseek/deepseek-v4-flash}
+
+    # On Linux, `host.docker.internal` doesn't resolve out of the box.
+    # This shim makes LOCAL_LLM_BASE_URL=http://host.docker.internal:.../v1
+    # work for users running a local LLM (vLLM, Ollama, llama.cpp) on
+    # the host. No-op on Mac/Windows where Docker Desktop already
+    # provides this hostname.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    volumes:
+      # SQLite DB + global settings. Persists run history across
+      # container restarts.
+      - ./.mle-beast:/home/mlebeast/.mle-beast
+      # Per-run workspace directories. You can ls/cat/grep these from
+      # the host to inspect what the agent did.
+      - ./workspaces:/workspaces
+
+    # GPU passthrough via the NVIDIA Container Toolkit. The host needs
+    # `nvidia-container-toolkit` (Linux) or Docker Desktop with WSL2
+    # GPU support enabled (Windows). For a CPU-only host, comment out
+    # this whole `deploy:` block — mle-beast will fall back to CPU
+    # automatically. Training will be slower but functional.
+    #
+    # NOTE: the `deploy.resources.reservations.devices` syntax requires
+    # Compose v2 (modern `docker compose`, NOT the older `docker-compose`
+    # script). It's the official Docker recipe for GPU passthrough —
+    # works with `docker compose up` outside Swarm mode in v2. Older
+    # `docker-compose` (v1) silently ignored `deploy:` blocks; if you
+    # have only that, upgrade to Docker Compose v2 or use raw
+    # `docker run --gpus all ...` instead.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    # Optional: keep the container running across host reboots. Off by
+    # default so the user is in clear control of the lifecycle.
+    # restart: unless-stopped

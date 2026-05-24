@@ -1,0 +1,101 @@
+# Build the user-facing mle-beast Docker image and publish to GHCR
+# (GitHub Container Registry, ghcr.io/<owner>/mle-beast).
+#
+# Triggers:
+#   - push to main → tag `:edge` (continuous-delivery slot for testing)
+#   - push of a `v*` tag (e.g. v0.1.0) → tags `:0.1.0` AND `:latest`
+#   - workflow_dispatch → manual rebuild from the Actions UI
+#
+# No manual secret setup required. GitHub provides `GITHUB_TOKEN`
+# with `packages: write` permission scoped to this repo's container
+# registry by default. The image lands at
+# https://github.com/users/<owner>/packages?repo_name=mle-beast.
+#
+# Image visibility (public vs private) is controlled in the GitHub
+# Packages UI after the first push — for an OSS project, toggle it
+# to "public" once and forget.
+#
+# Build platform: linux/amd64 only for v1. Most ML users have x86_64
+# + NVIDIA. arm64 / CPU-only variants deferred until user demand
+# justifies the extra CI minutes (multi-arch build doubles build time).
+
+name: docker-publish
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write     # required for the GHCR push
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    # GHA free runners give us ~14 GB free disk + 7 GB RAM. The
+    # mle-beast image clocks in around 6-8 GB built; we need to clear
+    # some preinstalled junk to fit it. The free-disk-space action
+    # buys us another ~30 GB.
+    steps:
+      - name: Free disk space (drop preinstalled Android/Haskell/etc)
+        # Pinned to SHA (v1.3.1) rather than a floating ref so this
+        # build is reproducible + can't get swapped under us by an
+        # upstream main-branch push. Update by checking
+        # https://github.com/jlumbroso/free-disk-space/releases
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: false
+          swap-storage: true
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Derive image tags from the ref:
+      #   - tag push v0.1.0 → ghcr.io/...:0.1.0 + ghcr.io/...:latest
+      #   - push to main    → ghcr.io/...:edge
+      #   - manual run      → ghcr.io/...:manual-<short-sha>
+      - name: Compute image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/mle-beast
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=manual-{{sha}},enable=${{ github.event_name == 'workflow_dispatch' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # GHA cache to speed up repeat builds. First build still
+          # takes 30-60 min (ml-frameworks clone + poetry pre-prime is
+          # the bulk); subsequent builds reuse most layers.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

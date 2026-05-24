@@ -24,7 +24,57 @@ target_metric: { name: accuracy, target_value: 0.85 }
 
 Both modes share the same hill-climbing engine: propose → implement → test → train → evaluate, keep improvements via git, revert failures.
 
-## Install
+## Quick start with Docker (recommended)
+
+Zero Python install needed on your host. Three commands:
+
+```bash
+# 1. Grab the compose file + env template
+curl -O https://raw.githubusercontent.com/cgpadwick/mle-beast/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/cgpadwick/mle-beast/main/.env.example
+
+# 2. Drop in your LLM provider key
+cp .env.example .env
+# edit .env, set OPENROUTER_API_KEY=sk-or-...  (or OPENAI_API_KEY, etc.)
+
+# 3. Up and away
+docker compose up
+# → dashboard at http://localhost:8000
+```
+
+The published image at `ghcr.io/cgpadwick/mle-beast` ships with ml-frameworks pre-cloned and the poetry wheel cache pre-primed, so the first greenfield run is fast (~30s of workspace setup instead of ~10 min of PyPI fetching). The default compose pulls `:edge` (continuous-delivery, follows every merge to main); switch to `:0.1.0` / `:latest` once stable releases are tagged.
+
+### Requirements
+
+- **Docker** (or Docker Desktop on Mac/Windows). Linux: also install `nvidia-container-toolkit` if you want GPU access; the image falls back to CPU automatically if the GPU isn't visible.
+- **An LLM provider key** — get one at [openrouter.ai](https://openrouter.ai/) (recommended, one key for many models), or use OpenAI / a local OpenAI-compatible endpoint.
+
+### Persistence
+
+`docker compose up` creates two host directories next to your `docker-compose.yml`:
+
+| Path | Holds |
+|---|---|
+| `./.mle-beast/` | SQLite DB + global settings. Run history survives `docker compose down`. |
+| `./workspaces/` | Per-run workspace dirs (`model.py`, checkpoints, reports). `cd` in from your host to grab a model. |
+
+### Without compose
+
+The same image works with raw `docker run` if you prefer:
+
+```bash
+docker run --rm --gpus all -p 8000:8000 \
+  -e OPENROUTER_API_KEY=sk-or-... \
+  -v $(pwd)/.mle-beast:/home/mlebeast/.mle-beast \
+  -v $(pwd)/workspaces:/workspaces \
+  ghcr.io/cgpadwick/mle-beast:edge
+```
+
+---
+
+## Developer install (native Python)
+
+Use this if you want to **bring your own venv** ([brownfield mode](#two-modes)) or **iterate on the mle-beast source**. The Docker bundle above is the easy "just try it" path; this is for when you want more control.
 
 ```bash
 # Recommended — installs in an isolated venv, command goes on your PATH
@@ -47,7 +97,7 @@ cd mle-beast
 pip install -e '.[web]'    # editable install — your changes are picked up live
 ```
 
-### Prerequisites
+### Prerequisites for native install
 
 mle-beast itself just needs Python 3.10+. For **greenfield** runs (where mle-beast builds a workspace venv for you) it also needs:
 
@@ -56,9 +106,9 @@ mle-beast itself just needs Python 3.10+. For **greenfield** runs (where mle-bea
 
 The `mle-beast init` step below diagnoses these for you and offers to install poetry via pipx if it's missing. **Brownfield / BYO-environment runs skip both** — you bring your own venv.
 
-## Quickstart
+### First-run setup (native)
 
-After installing mle-beast (above), run `mle-beast init` in your project directory:
+After installing mle-beast, run `mle-beast init` in your project directory:
 
 ```bash
 mkdir ~/my-mle-experiment && cd ~/my-mle-experiment

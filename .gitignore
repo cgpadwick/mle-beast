@@ -27,6 +27,14 @@ cache/
 test-run/
 bench-run*/
 
+# Docker Compose bind-mount dirs. The user-facing Docker bundle binds
+# these to /home/mlebeast/.mle-beast and /workspaces inside the
+# container so SQLite + run history + workspace dirs persist across
+# `docker compose down`. They show up in the repo dir on first run
+# and would otherwise pollute git status.
+.mle-beast/
+workspaces/
+
 # OS
 .DS_Store
 Thumbs.db
