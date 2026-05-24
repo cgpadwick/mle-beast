@@ -1,0 +1,484 @@
+#!/usr/bin/env bash
+# mle-beast quickstart wizard.
+#
+# Curl-able first-run setup. Usage:
+#
+#   curl -fsSL https://raw.githubusercontent.com/cgpadwick/mle-beast/main/setup-mle-beast.sh | bash
+#
+# Or, if you'd rather review before running (recommended for any
+# pipe-to-shell script):
+#
+#   curl -fsSL https://raw.githubusercontent.com/cgpadwick/mle-beast/main/setup-mle-beast.sh -o setup-mle-beast.sh
+#   less setup-mle-beast.sh
+#   bash setup-mle-beast.sh
+#
+# Two installation paths, picked interactively or via flags:
+#
+#   --docker   Generate a docker-compose.yml + .env in CWD, run
+#              `docker compose up -d`. Zero host-side Python install.
+#   --native   pipx install mle-beast, then hand off to `mle-beast init`
+#              for the per-project setup.
+#
+# Non-interactive automation flags (Docker path):
+#   --yes / -y           Accept all defaults; no prompts.
+#   --openrouter-key=K   Set OPENROUTER_API_KEY in .env (skips prompt).
+#   --openai-key=K       Set OPENAI_API_KEY.
+#   --local-llm-url=URL  Set LOCAL_LLM_BASE_URL.
+#   --gpu / --no-gpu     Force GPU on/off (default: auto-detect).
+#   --port=N             Dashboard port (default: 8000).
+#   --tag=T              Image tag (default: edge).
+
+set -euo pipefail
+
+# --------------------------------------------------------------------
+# Configuration constants
+# --------------------------------------------------------------------
+
+readonly IMAGE_REPO="ghcr.io/cgpadwick/mle-beast"
+readonly DEFAULT_TAG="edge"
+readonly DEFAULT_PORT="8000"
+
+# --------------------------------------------------------------------
+# Output helpers — ANSI colors only when stdout is a TTY (so
+# `| tee log` produces clean output).
+# --------------------------------------------------------------------
+
+if [ -t 1 ] && [ "${NO_COLOR:-}" = "" ]; then
+  C_RESET=$'\033[0m'
+  C_BOLD=$'\033[1m'
+  C_DIM=$'\033[2m'
+  C_GREEN=$'\033[32m'
+  C_RED=$'\033[31m'
+  C_YELLOW=$'\033[33m'
+  C_CYAN=$'\033[36m'
+else
+  C_RESET=''
+  C_BOLD=''
+  C_DIM=''
+  C_GREEN=''
+  C_RED=''
+  C_YELLOW=''
+  C_CYAN=''
+fi
+
+header() { printf '\n%s⏵ %s%s\n' "${C_BOLD}" "$1" "${C_RESET}"; }
+ok()     { printf '  %s✓%s %s\n' "${C_GREEN}" "${C_RESET}" "$1"; }
+fail()   { printf '  %s✗%s %s\n' "${C_RED}" "${C_RESET}" "$1" >&2; exit 1; }
+warn()   { printf '  %s⚠%s %s\n' "${C_YELLOW}" "${C_RESET}" "$1"; }
+info()   { printf '  %s→%s %s\n' "${C_CYAN}" "${C_RESET}" "$1"; }
+dim()    { printf '  %s%s%s\n' "${C_DIM}" "$1" "${C_RESET}"; }
+
+# --------------------------------------------------------------------
+# Argument parsing
+# --------------------------------------------------------------------
+
+PATH_CHOICE=""           # "docker" | "native" | "" (= ask)
+YES=false
+OPENROUTER_KEY=""
+OPENAI_KEY=""
+LOCAL_LLM_URL=""
+GPU_PREF=""              # "yes" | "no" | "" (= auto-detect)
+PORT="$DEFAULT_PORT"
+TAG="$DEFAULT_TAG"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --docker)             PATH_CHOICE="docker" ;;
+    --native)             PATH_CHOICE="native" ;;
+    --yes|-y)             YES=true ;;
+    --openrouter-key=*)   OPENROUTER_KEY="${1#*=}" ;;
+    --openai-key=*)       OPENAI_KEY="${1#*=}" ;;
+    --local-llm-url=*)    LOCAL_LLM_URL="${1#*=}" ;;
+    --gpu)                GPU_PREF="yes" ;;
+    --no-gpu)             GPU_PREF="no" ;;
+    --port=*)             PORT="${1#*=}" ;;
+    --tag=*)              TAG="${1#*=}" ;;
+    -h|--help)
+      sed -n '/^# mle-beast quickstart wizard\./,/^set -euo/p' "$0" | sed 's/^# \{0,1\}//; /^set -euo/d'
+      exit 0 ;;
+    *)
+      fail "Unknown flag: $1 (try --help)" ;;
+  esac
+  shift
+done
+
+# --------------------------------------------------------------------
+# Banner
+# --------------------------------------------------------------------
+
+printf '%smle-beast quickstart%s\n' "${C_BOLD}" "${C_RESET}"
+dim "https://github.com/cgpadwick/mle-beast"
+
+# --------------------------------------------------------------------
+# Prompt helpers
+# --------------------------------------------------------------------
+
+# Plain prompt. Returns default value when --yes is on.
+ask() {
+  local prompt="$1"
+  local default="${2:-}"
+  local suffix=""
+  [ -n "$default" ] && suffix=" [${default}]"
+  if [ "$YES" = "true" ]; then
+    printf '%s' "$default"
+    return
+  fi
+  local raw
+  read -r -p "  ${prompt}${suffix}: " raw </dev/tty
+  printf '%s' "${raw:-$default}"
+}
+
+# Hidden prompt for secrets. Returns empty when --yes (no way to
+# default a secret).
+ask_hidden() {
+  local prompt="$1"
+  if [ "$YES" = "true" ]; then
+    printf ''
+    return
+  fi
+  local raw
+  read -r -s -p "  ${prompt}: " raw </dev/tty
+  printf '\n' >&2
+  printf '%s' "$raw"
+}
+
+# Yes/no prompt. Default Y unless explicit "n" passed.
+ask_bool() {
+  local prompt="$1"
+  local default="${2:-y}"
+  if [ "$YES" = "true" ]; then
+    [ "$default" = "y" ] && return 0 || return 1
+  fi
+  local suffix
+  if [ "$default" = "y" ]; then suffix="[Y/n]"; else suffix="[y/N]"; fi
+  local raw
+  read -r -p "  ${prompt} ${suffix} " raw </dev/tty || raw=""
+  case "$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')" in
+    y|yes|1|true) return 0 ;;
+    n|no|0|false) return 1 ;;
+    "") [ "$default" = "y" ] && return 0 || return 1 ;;
+    *) [ "$default" = "y" ] && return 0 || return 1 ;;
+  esac
+}
+
+# --------------------------------------------------------------------
+# Path chooser
+# --------------------------------------------------------------------
+
+if [ -z "$PATH_CHOICE" ]; then
+  header "How do you want to use mle-beast?"
+  printf '    1) %sDocker%s    quick try, zero host install (recommended for first-timers)\n' "${C_BOLD}" "${C_RESET}"
+  printf '    2) %sNative%s    pipx install on host (BYO env / hack on the source)\n' "${C_BOLD}" "${C_RESET}"
+  raw=$(ask "Choice" "1")
+  case "$raw" in
+    2|native|Native|NATIVE)  PATH_CHOICE="native" ;;
+    *)                       PATH_CHOICE="docker" ;;
+  esac
+fi
+
+# --------------------------------------------------------------------
+# Native path: defer almost everything to `mle-beast init`
+# --------------------------------------------------------------------
+
+run_native() {
+  header "Checking native-install prerequisites"
+
+  # Python 3.10+
+  if ! command -v python3 >/dev/null 2>&1; then
+    fail "python3 not found. Install Python 3.10+ via your system package manager and re-run."
+  fi
+  local py_version
+  py_version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+  ok "python3 ${py_version}"
+  if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)'; then
+    fail "Python ${py_version} is too old. mle-beast requires 3.10+."
+  fi
+
+  # pipx
+  if command -v pipx >/dev/null 2>&1; then
+    ok "pipx $(pipx --version)"
+  else
+    warn "pipx not found."
+    info "Install with one of:"
+    dim "    sudo apt install pipx                 # Debian / Ubuntu"
+    dim "    brew install pipx                     # macOS"
+    dim "    python3 -m pip install --user pipx    # universal fallback"
+    dim "    python3 -m pipx ensurepath            # add to PATH"
+    info "Then open a new shell and re-run this script."
+    exit 1
+  fi
+
+  header "Installing mle-beast via pipx"
+  # Try PyPI first (the standard install path post-v0.1.0). If that
+  # fails — e.g. pre-release window where mle-beast isn't on PyPI
+  # yet — fall back to installing directly from the GitHub repo so
+  # the script remains useful TODAY without waiting for a publish.
+  if pipx install mle-beast 2>/dev/null; then
+    ok "mle-beast installed (from PyPI)"
+  else
+    info "PyPI install didn't work (likely pre-launch); trying GitHub instead…"
+    if pipx install git+https://github.com/cgpadwick/mle-beast.git 2>&1 | tail -3; then
+      ok "mle-beast installed (from GitHub main)"
+    else
+      fail "pipx install failed from both PyPI and GitHub. Check the pipx error log above."
+    fi
+  fi
+
+  header "Handing off to mle-beast init"
+  dim "  The next step is interactive. mle-beast init walks you through"
+  dim "  prereqs, LLM provider selection, model picking, and scaffolds"
+  dim "  .env + AGENTS.md in your current directory."
+  printf '\n'
+
+  # Exec so the user's shell takes over the init wizard cleanly —
+  # this script exits, mle-beast init owns the tty.
+  exec mle-beast init
+}
+
+# --------------------------------------------------------------------
+# Docker path
+# --------------------------------------------------------------------
+
+# Compose v2 vs v1 detection — they're different binaries.
+# v2 = `docker compose` subcommand of the docker CLI (current).
+# v1 = `docker-compose` standalone (deprecated, was never going to
+# support the `deploy.resources.reservations.devices` GPU block we
+# emit). We require v2.
+compose_v2_present() {
+  docker compose version >/dev/null 2>&1
+}
+
+detect_nvidia_runtime() {
+  # `docker info` reports registered runtimes. If "nvidia" is among
+  # them, the NVIDIA Container Toolkit is installed and `--gpus all`
+  # will work.
+  docker info 2>/dev/null | grep -qiE '^\s*Runtimes:.*\bnvidia\b'
+}
+
+run_docker() {
+  header "Checking Docker prerequisites"
+
+  if ! command -v docker >/dev/null 2>&1; then
+    warn "docker not found on PATH."
+    info "Install Docker via the official path for your platform:"
+    dim "    https://docs.docker.com/engine/install/"
+    info "After install, ensure your user is in the docker group:"
+    dim "    sudo usermod -aG docker \$USER     # then log out / back in"
+    exit 1
+  fi
+  ok "docker $(docker --version | awk '{print $3}' | tr -d ',')"
+
+  if ! compose_v2_present; then
+    warn "docker compose v2 not detected."
+    info "On most modern Docker installs, compose ships as a plugin."
+    info "Install via:"
+    dim "    sudo apt install docker-compose-plugin    # Debian / Ubuntu (Docker repo)"
+    dim "    brew install docker-compose               # macOS"
+    info "Or follow https://docs.docker.com/compose/install/."
+    exit 1
+  fi
+  ok "docker compose $(docker compose version --short)"
+
+  # GPU detection. If user explicitly said --no-gpu, skip. Otherwise
+  # probe for the nvidia runtime; if absent and they didn't insist
+  # on GPU via --gpu, ask interactively.
+  local want_gpu="$GPU_PREF"
+  if [ "$want_gpu" = "" ]; then
+    if detect_nvidia_runtime; then
+      ok "nvidia-container-toolkit detected (GPU passthrough available)"
+      want_gpu="yes"
+    else
+      warn "nvidia-container-toolkit not detected."
+      dim "    Install: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html"
+      dim "    Without it, the container can still run — just CPU-only."
+      if ask_bool "Continue without GPU?" "y"; then
+        want_gpu="no"
+      else
+        info "Install the toolkit, then re-run this script."
+        exit 1
+      fi
+    fi
+  elif [ "$want_gpu" = "yes" ] && ! detect_nvidia_runtime; then
+    warn "--gpu passed but nvidia-container-toolkit not detected. Trying anyway."
+  fi
+
+  # ---- Provider selection ----
+  header "LLM provider"
+
+  # If any provider keys / urls were passed on the CLI, skip the picker.
+  local provider_via_flags=false
+  if [ -n "$OPENROUTER_KEY" ] || [ -n "$OPENAI_KEY" ] || [ -n "$LOCAL_LLM_URL" ]; then
+    provider_via_flags=true
+  fi
+
+  local provider
+  if [ "$provider_via_flags" = "true" ]; then
+    # Pick the first non-empty key as the provider.
+    if [ -n "$OPENROUTER_KEY" ]; then provider="openrouter"
+    elif [ -n "$OPENAI_KEY" ];     then provider="openai"
+    else                                 provider="local"
+    fi
+    ok "Provider via flag: $provider"
+  else
+    printf '    1) %sOpenRouter%s   (one key, many models — recommended)\n' "${C_BOLD}" "${C_RESET}"
+    printf '    2) %sOpenAI%s\n' "${C_BOLD}" "${C_RESET}"
+    printf '    3) %sLocal LLM%s    (vLLM / Ollama / llama.cpp, OpenAI-compatible /v1/* API)\n' "${C_BOLD}" "${C_RESET}"
+    raw=$(ask "Choice" "1")
+    case "$raw" in
+      2) provider="openai" ;;
+      3) provider="local" ;;
+      *) provider="openrouter" ;;
+    esac
+  fi
+
+  # ---- Key / URL ----
+  case "$provider" in
+    openrouter)
+      if [ -z "$OPENROUTER_KEY" ]; then
+        OPENROUTER_KEY=$(ask_hidden "Paste OPENROUTER_API_KEY (hidden, won't echo)")
+      fi
+      [ -z "$OPENROUTER_KEY" ] && warn "No key provided. mle-beast will fail at first run; you can edit .env later."
+      ;;
+    openai)
+      if [ -z "$OPENAI_KEY" ]; then
+        OPENAI_KEY=$(ask_hidden "Paste OPENAI_API_KEY (hidden, won't echo)")
+      fi
+      [ -z "$OPENAI_KEY" ] && warn "No key provided. mle-beast will fail at first run; you can edit .env later."
+      ;;
+    local)
+      if [ -z "$LOCAL_LLM_URL" ]; then
+        # Default to host.docker.internal which the compose extra_hosts
+        # block makes work on Linux too.
+        LOCAL_LLM_URL=$(ask "Local LLM base URL (use host.docker.internal to reach a host-running server)" "http://host.docker.internal:8001/v1")
+      fi
+      ;;
+  esac
+
+  # ---- Port / tag ----
+  header "Dashboard host port"
+  PORT=$(ask "Port" "$PORT")
+  header "Image tag"
+  dim "  :edge tracks every main merge. :latest tracks tagged releases."
+  TAG=$(ask "Tag" "$TAG")
+
+  # ---- Write files ----
+  header "Writing files to $(pwd)"
+  write_env_file "$provider" "$OPENROUTER_KEY" "$OPENAI_KEY" "$LOCAL_LLM_URL"
+  ok ".env"
+  write_compose_file "$provider" "$want_gpu" "$PORT" "$TAG"
+  ok "docker-compose.yml"
+
+  # Pre-create the bind-mount directories so the running user owns
+  # them. Without this, `docker compose up` would create them at
+  # mount time as root, which means the container's mlebeast user
+  # (uid 1000) can't write to them — every SQLite write fails with
+  # EACCES and /api/runs returns HTTP 500. Caught during local
+  # smoke testing of this script.
+  mkdir -p .mle-beast workspaces
+  ok "bind-mount directories (.mle-beast, workspaces) created with your UID"
+
+  # Ensure .gitignore covers .env if the cwd is a git repo
+  if [ -d .git ] && [ ! -f .gitignore ]; then
+    printf '.env\n.mle-beast/\nworkspaces/\n' > .gitignore
+    ok ".gitignore (created)"
+  elif [ -f .gitignore ] && ! grep -qx '\.env' .gitignore 2>/dev/null; then
+    printf '\n# Added by setup-mle-beast.sh\n.env\n.mle-beast/\nworkspaces/\n' >> .gitignore
+    ok ".gitignore (.env appended)"
+  fi
+
+  # ---- Start ----
+  header "Starting container"
+  if ! docker compose up -d; then
+    fail "docker compose up failed. Check 'docker compose logs' for details."
+  fi
+
+  printf '\n'
+  printf '%s%s✓ mle-beast is running%s\n' "${C_BOLD}" "${C_GREEN}" "${C_RESET}"
+  printf '\n'
+  printf '    Dashboard:  %shttp://localhost:%s%s\n' "${C_CYAN}" "${PORT}" "${C_RESET}"
+  printf '    Logs:       docker compose logs -f\n'
+  printf '    Stop:       docker compose down\n'
+  printf '    Update:     docker compose pull && docker compose up -d\n'
+  printf '\n'
+}
+
+# --------------------------------------------------------------------
+# File writers — generators for the .env and docker-compose.yml
+# tailored to the user's answers. Two sources of truth (this and the
+# canonical compose at repo root), but the compose surface is small
+# and changes are rare.
+# --------------------------------------------------------------------
+
+write_env_file() {
+  local provider="$1" or_key="$2" oa_key="$3" local_url="$4"
+  {
+    printf '# Generated by setup-mle-beast.sh on %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf '# Used by docker-compose.yml — Compose substitutes ${VAR} from this file.\n'
+    printf '\n'
+    printf 'MLE_BEAST_PROVIDER=%s\n' "$provider"
+    case "$provider" in
+      openrouter)  printf 'OPENROUTER_API_KEY=%s\n' "$or_key" ;;
+      openai)      printf 'OPENAI_API_KEY=%s\n' "$oa_key" ;;
+      local)       printf 'LOCAL_LLM_BASE_URL=%s\n' "$local_url" ;;
+    esac
+    printf '# Override the model slug here if you want something other\n'
+    printf '# than the default (deepseek/deepseek-v4-flash):\n'
+    printf '# MLE_BEAST_MODEL=anthropic/claude-haiku-4-5\n'
+  } > .env
+  chmod 600 .env 2>/dev/null || true
+}
+
+write_compose_file() {
+  local provider="$1" want_gpu="$2" port="$3" tag="$4"
+  {
+    printf '# Generated by setup-mle-beast.sh on %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf '# Edit .env to change provider keys / model. Edit this file\n'
+    printf '# directly for structural changes (ports, volumes, etc.).\n'
+    printf '\n'
+    printf 'services:\n'
+    printf '  mle-beast:\n'
+    printf '    image: %s:%s\n' "$IMAGE_REPO" "$tag"
+    printf '    container_name: mle-beast\n'
+    printf '    ports:\n'
+    printf '      - "%s:8000"\n' "$port"
+    printf '    environment:\n'
+    case "$provider" in
+      openrouter)
+        printf '      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}\n'
+        printf '      MLE_BEAST_PROVIDER: openrouter\n' ;;
+      openai)
+        printf '      OPENAI_API_KEY: ${OPENAI_API_KEY:-}\n'
+        printf '      MLE_BEAST_PROVIDER: openai\n' ;;
+      local)
+        printf '      LOCAL_LLM_BASE_URL: ${LOCAL_LLM_BASE_URL:-}\n'
+        printf '      MLE_BEAST_PROVIDER: local\n' ;;
+    esac
+    printf '      MLE_BEAST_MODEL: ${MLE_BEAST_MODEL:-deepseek/deepseek-v4-flash}\n'
+    if [ "$provider" = "local" ]; then
+      printf '    extra_hosts:\n'
+      printf '      - "host.docker.internal:host-gateway"\n'
+    fi
+    printf '    volumes:\n'
+    printf '      - ./.mle-beast:/home/mlebeast/.mle-beast\n'
+    printf '      - ./workspaces:/workspaces\n'
+    if [ "$want_gpu" = "yes" ]; then
+      printf '    deploy:\n'
+      printf '      resources:\n'
+      printf '        reservations:\n'
+      printf '          devices:\n'
+      printf '            - driver: nvidia\n'
+      printf '              count: all\n'
+      printf '              capabilities: [gpu]\n'
+    fi
+  } > docker-compose.yml
+}
+
+# --------------------------------------------------------------------
+# Dispatch
+# --------------------------------------------------------------------
+
+case "$PATH_CHOICE" in
+  docker) run_docker ;;
+  native) run_native ;;
+  *)      fail "Unknown path: $PATH_CHOICE" ;;
+esac
