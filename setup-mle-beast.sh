@@ -167,7 +167,7 @@ ask_bool() {
 
 if [ -z "$PATH_CHOICE" ]; then
   header "How do you want to use mle-beast?"
-  printf '    1) %sDocker%s    quick try, zero host install (recommended for first-timers)\n' "${C_BOLD}" "${C_RESET}"
+  printf '    1) %sDocker%s    zero host install, full isolation\n' "${C_BOLD}" "${C_RESET}"
   printf '    2) %sNative%s    pipx install on host (BYO env / hack on the source)\n' "${C_BOLD}" "${C_RESET}"
   raw=$(ask "Choice" "1")
   case "$raw" in
