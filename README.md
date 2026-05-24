@@ -42,7 +42,7 @@ docker compose up
 # → dashboard at http://localhost:8000
 ```
 
-The published image at `ghcr.io/cgpadwick/mle-beast:latest` ships with ml-frameworks pre-cloned and the poetry wheel cache pre-primed, so the first greenfield run is fast (~30s of workspace setup instead of ~10 min of PyPI fetching).
+The published image at `ghcr.io/cgpadwick/mle-beast` ships with ml-frameworks pre-cloned and the poetry wheel cache pre-primed, so the first greenfield run is fast (~30s of workspace setup instead of ~10 min of PyPI fetching). The default compose pulls `:edge` (continuous-delivery, follows every merge to main); switch to `:0.1.0` / `:latest` once stable releases are tagged.
 
 ### Requirements
 
@@ -67,7 +67,7 @@ docker run --rm --gpus all -p 8000:8000 \
   -e OPENROUTER_API_KEY=sk-or-... \
   -v $(pwd)/.mle-beast:/home/mlebeast/.mle-beast \
   -v $(pwd)/workspaces:/workspaces \
-  ghcr.io/cgpadwick/mle-beast:latest
+  ghcr.io/cgpadwick/mle-beast:edge
 ```
 
 ---

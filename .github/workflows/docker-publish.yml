@@ -42,7 +42,11 @@ jobs:
     # buys us another ~30 GB.
     steps:
       - name: Free disk space (drop preinstalled Android/Haskell/etc)
-        uses: jlumbroso/free-disk-space@main
+        # Pinned to SHA (v1.3.1) rather than a floating ref so this
+        # build is reproducible + can't get swapped under us by an
+        # upstream main-branch push. Update by checking
+        # https://github.com/jlumbroso/free-disk-space/releases
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
         with:
           tool-cache: false
           android: true

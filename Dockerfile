@@ -12,10 +12,14 @@
 #  - Pre-clones ml-frameworks AND pre-primes the poetry cache so the
 #    first workspace setup is fast (cp instead of git clone; install
 #    resolves locally instead of pulling 5+ GB from PyPI).
-#  - Two env vars (MLE_BEAST_ML_FRAMEWORKS_CACHE, MLE_BEAST_STACK_OVERRIDE)
-#    tell mle-beast's workspace setup to USE the bundled cache instead
-#    of going to the network. Without these, the image would still work
-#    but each new workspace would re-download the world.
+#  - Two env vars tell mle-beast's workspace setup to USE the bundled
+#    cache instead of going to the network. Without these, the image
+#    would still work but each new workspace would re-download
+#    everything:
+#      MLE_BEAST_ML_FRAMEWORKS_CACHE — WorkspaceCreator reads this and
+#        cp -r's instead of git clone'ing.
+#      MLE_PYTORCH_STACK — cuda_detection.py's existing override hook;
+#        forces the cu126 stack to match the poetry cache we primed.
 
 FROM nvidia/cuda:12.6.0-base-ubuntu22.04
 
