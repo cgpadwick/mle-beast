@@ -274,6 +274,12 @@ class TestRunsRoutes:
             lambda workspace, mode=None: None,
         )
 
+    def test_version_endpoint(self, client):
+        r = client.get("/api/version")
+        assert r.status_code == 200
+        v = r.json().get("version")
+        assert isinstance(v, str) and v  # non-empty string
+
     def test_list_runs_empty(self, client):
         r = client.get("/api/runs")
         assert r.status_code == 200

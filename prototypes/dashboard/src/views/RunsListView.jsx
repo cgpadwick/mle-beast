@@ -9,6 +9,7 @@ import { fmtDuration, fmtScore, fmtTokens } from "../format.js";
 function RunsListView({ onOpen, onNew, onHome }) {
   const [runs, setRuns] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [version, setVersion] = useState(null);
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -20,6 +21,11 @@ function RunsListView({ onOpen, onNew, onHome }) {
     const t = setInterval(refresh, 5000);  // gentle live-refresh of the list
     return () => clearInterval(t);
   }, [refresh]);
+
+  // Version is static for the session — fetch once.
+  useEffect(() => {
+    API.getVersion().then(d => setVersion(d?.version)).catch(() => {});
+  }, []);
 
   const liveCount = runs.filter(r => r.status === "running" || r.status === "pending").length;
 
@@ -90,6 +96,12 @@ function RunsListView({ onOpen, onNew, onHome }) {
                 textShadow: "var(--hero-subtext-shadow)",
               }}>
                 <span>autonomous ML research agent</span>
+                {version && (
+                  <>
+                    <span style={{ color: "var(--hero-text-faint)" }}>·</span>
+                    <span title="mle-beast version">v{version}</span>
+                  </>
+                )}
                 <span style={{ color: "var(--hero-text-faint)" }}>·</span>
                 <span>{loading ? "loading…" : `${runs.length} runs`}</span>
                 {liveCount > 0 && (

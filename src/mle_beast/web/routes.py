@@ -127,6 +127,13 @@ def register_routes(app: FastAPI) -> None:
     # REST API
     # ------------------------------------------------------------------
 
+    @app.get("/api/version")
+    async def api_version():
+        """The running mle-beast version, for display in the dashboard.
+        Sourced from the installed package metadata (pyproject.toml)."""
+        from mle_beast import __version__
+        return {"version": __version__}
+
     @app.get("/api/runs")
     async def api_list_runs(status: Optional[str] = Query(None)):
         manager = get_run_manager()
