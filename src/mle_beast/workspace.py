@@ -180,20 +180,31 @@ def suggested_workspace_root() -> Optional[str]:
     arbitrary host path.
     """
     p = Path("/workspaces")
-    # Creating subdirs/files in a directory needs write AND execute (search)
-    # permission — W_OK alone isn't enough.
-    if p.is_dir() and os.access(str(p), os.W_OK | os.X_OK):
-        return "/workspaces"
-    return None
+    try:
+        # Creating subdirs/files in a directory needs write AND execute
+        # (search) permission — W_OK alone isn't enough.
+        if not (p.is_dir() and os.access(str(p), os.W_OK | os.X_OK)):
+            return None
+        # Only treat it as the bind mount when it's actually a mount point —
+        # i.e. on a different filesystem (st_dev) from its parent. Otherwise a
+        # native install that happens to have a plain (non-mounted)
+        # /workspaces dir would get the container-specific "mounted to your
+        # host" guidance, which would be wrong.
+        if os.stat(str(p)).st_dev == os.stat(str(p.parent)).st_dev:
+            return None
+    except OSError:
+        return None
+    return "/workspaces"
 
 
 def _exists_safe(path: Path) -> bool:
-    """``Path.exists()`` that treats a permission error as non-existent.
+    """``Path.exists()`` that never raises.
 
-    ``exists()`` re-raises EACCES (it can't ``stat`` through a directory that
-    lacks search/execute permission), so calling it on a path under such a
-    directory would leak a PermissionError. We want those to flow into the
-    "not writable" check and produce a clean RuntimeError instead.
+    ``exists()`` re-raises errors such as EACCES (it can't ``stat`` through a
+    directory that lacks search/execute permission). We treat any OSError —
+    permission denied, symlink loop, name too long, etc. — as "not a usable
+    existing path" so the caller's writability check produces a clean
+    RuntimeError instead of leaking the OSError as a 500.
     """
     try:
         return path.exists()

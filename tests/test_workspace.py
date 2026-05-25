@@ -162,6 +162,41 @@ class TestValidateWorkspacePath:
             os.chmod(nox, 0o700)
 
 
+class TestSuggestedWorkspaceRoot:
+    """suggested_workspace_root() must only claim /workspaces when it's an
+    actual mount — not a plain dir a native user happens to have created."""
+
+    def _patch(self, monkeypatch, *, is_dir, ws_dev, parent_dev):
+        from pathlib import Path as _Path
+
+        from mle_beast import workspace as ws
+
+        monkeypatch.setattr(_Path, "is_dir", lambda self: is_dir)
+        monkeypatch.setattr(ws.os, "access", lambda p, m: True)
+
+        class _St:
+            def __init__(self, dev):
+                self.st_dev = dev
+
+        monkeypatch.setattr(
+            ws.os, "stat",
+            lambda p: _St(ws_dev if str(p) == "/workspaces" else parent_dev),
+        )
+        return ws
+
+    def test_returns_root_when_mounted(self, monkeypatch):
+        ws = self._patch(monkeypatch, is_dir=True, ws_dev=42, parent_dev=1)
+        assert ws.suggested_workspace_root() == "/workspaces"
+
+    def test_none_for_plain_dir_same_device(self, monkeypatch):
+        ws = self._patch(monkeypatch, is_dir=True, ws_dev=1, parent_dev=1)
+        assert ws.suggested_workspace_root() is None
+
+    def test_none_when_not_a_dir(self, monkeypatch):
+        ws = self._patch(monkeypatch, is_dir=False, ws_dev=42, parent_dev=1)
+        assert ws.suggested_workspace_root() is None
+
+
 # ----------------------------------------------------------------
 # _clone_ml_frameworks: bundled-cache fast path
 # ----------------------------------------------------------------

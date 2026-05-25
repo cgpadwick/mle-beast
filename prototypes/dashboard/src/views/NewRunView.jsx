@@ -45,8 +45,14 @@ function NewRunView({ onCreated, onCancel }) {
       .then(({ root }) => {
         if (cancelled || !root) return;
         setWsRoot(root);
-        // Prefill only if the user hasn't already typed a path.
-        setForm(f => f.workspace ? f : { ...f, workspace: root + "/" });
+        // Prefill a UNIQUE subdir (root/run-<timestamp>) rather than a bare
+        // "root/". The field is required and easy to submit unedited; a bare
+        // root would make every run share one workspace and clobber each
+        // other. Only prefill if the user hasn't already typed a path.
+        const d = new Date();
+        const p = (n) => String(n).padStart(2, "0");
+        const stamp = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+        setForm(f => f.workspace ? f : { ...f, workspace: `${root}/run-${stamp}` });
       })
       .catch(() => {});
     return () => { cancelled = true; };
