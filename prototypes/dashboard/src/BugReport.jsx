@@ -4,7 +4,7 @@
 // GitHub's prefill URL caps around 8 KB, so long error text can't all ride
 // in the URL.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { API } from "./api.js";
 
@@ -72,39 +72,71 @@ function issueUrl(diag, run) {
  *        When present the button reads "Report this run" and includes the
  *        run id + error in the issue.
  */
+function copyText(text) {
+  // Prefer the async clipboard API; fall back to a hidden textarea +
+  // execCommand for non-secure contexts (e.g. the container served over
+  // http on a LAN IP, where navigator.clipboard is unavailable).
+  if (navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+  return new Promise((resolve, reject) => {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      resolve();
+    } catch (e) { reject(e); }
+  });
+}
+
 function ReportBugButton({ run, compact }) {
-  const [busy, setBusy] = useState(false);
+  const [diag, setDiag] = useState(null);
   const [copied, setCopied] = useState(false);
 
-  const fetchDiag = async () => {
-    try { return await API.getDiagnostics(); } catch { return null; }
+  // Prefetch diagnostics on mount so the click handlers stay SYNCHRONOUS.
+  // window.open / clipboard writes must happen inside the user gesture — an
+  // intervening `await` trips popup blockers and clipboard-permission checks.
+  useEffect(() => {
+    let cancelled = false;
+    API.getDiagnostics().then(d => { if (!cancelled) setDiag(d); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const open = () => {
+    if (diag) {
+      // Synchronous — same gesture, no popup block.
+      window.open(issueUrl(diag, run), "_blank", "noopener,noreferrer");
+      return;
+    }
+    // Diagnostics not back yet (rare): open the tab synchronously now, then
+    // navigate it once the fetch resolves so the popup still isn't blocked.
+    const w = window.open("about:blank", "_blank", "noopener,noreferrer");
+    API.getDiagnostics().catch(() => null).then(d => {
+      const url = issueUrl(d, run);
+      if (w) w.location = url; else window.open(url, "_blank", "noopener,noreferrer");
+    });
   };
 
-  const open = async () => {
-    setBusy(true);
-    const diag = await fetchDiag();
-    window.open(issueUrl(diag, run), "_blank", "noopener,noreferrer");
-    setBusy(false);
-  };
-
-  const copy = async () => {
-    const diag = await fetchDiag();
-    try {
-      await navigator.clipboard.writeText(buildBody(diag, run));
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch { /* clipboard blocked — the GitHub button still works */ }
+  const copy = () => {
+    copyText(buildBody(diag, run))
+      .then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); })
+      .catch(() => { /* copy unavailable — the GitHub button still works */ });
   };
 
   const btn = {
     fontSize: compact ? 11 : 12, fontWeight: 600,
     padding: compact ? "5px 10px" : "7px 14px", borderRadius: 8,
-    cursor: busy ? "wait" : "pointer", fontFamily: "'JetBrains Mono',monospace",
+    cursor: "pointer", fontFamily: "'JetBrains Mono',monospace",
   };
 
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-      <button onClick={open} disabled={busy} style={{
+      <button onClick={open} style={{
         ...btn,
         background: "rgba(248,113,113,0.10)",
         border: "1px solid rgba(248,113,113,0.35)",
