@@ -23,6 +23,7 @@ const API = {
   generateReport: (id) => fetch(`/api/runs/${id}/report`, { method: "POST" }).then(r => r.json()),
   detectLocalModel: () => fetch("/api/local-model-name").then(r => r.json()),
   getVersion: () => fetch("/api/version").then(r => r.json()),
+  getDiagnostics: () => fetch("/api/diagnostics").then(r => r.json()),
 };
 
 export { API };

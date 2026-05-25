@@ -134,6 +134,37 @@ def register_routes(app: FastAPI) -> None:
         from mle_beast import __version__
         return {"version": __version__}
 
+    @app.get("/api/diagnostics")
+    async def api_diagnostics():
+        """Environment snapshot for bug reports — auto-collected so the
+        dashboard's "Report a bug" flow can pre-fill a GitHub issue.
+
+        Deliberately NO secrets: only the provider *name* and model are
+        reported, never API keys (which live in env, not settings anyway).
+        """
+        import os
+        import platform
+
+        from mle_beast import __version__
+        from mle_beast.cuda_detection import detect_cuda_version
+        from mle_beast.settings import get_settings
+
+        s = get_settings()
+        cuda = detect_cuda_version()
+        in_docker = (
+            Path("/.dockerenv").exists()
+            or bool(os.environ.get("MLE_BEAST_ML_FRAMEWORKS_CACHE"))
+        )
+        return {
+            "version": __version__,
+            "install": "docker" if in_docker else "native",
+            "os": platform.platform(),
+            "python": platform.python_version(),
+            "gpu": f"CUDA {cuda[0]}.{cuda[1]}" if cuda else "none detected",
+            "provider": s.model_provider or "(auto-detect)",
+            "model": s.model_name or "(default)",
+        }
+
     @app.get("/api/runs")
     async def api_list_runs(status: Optional[str] = Query(None)):
         manager = get_run_manager()

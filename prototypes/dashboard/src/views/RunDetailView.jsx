@@ -14,6 +14,7 @@ import { PipelineIndicator, PipelineDagPanel } from "../PipelineDag.jsx";
 import { DetailsModal, EventDetailsModal } from "../modals.jsx";
 import { useRunSSE } from "../useRunSSE.js";
 import { eventToItem } from "../format.js";
+import { ReportBugButton } from "../BugReport.jsx";
 
 import { RunHeader } from "./runDetail/RunHeader.jsx";
 import { StatsCards } from "./runDetail/StatsCards.jsx";
@@ -27,9 +28,10 @@ import { StagePanel } from "./runDetail/StagePanel.jsx";
 // traceback, so render it in a scrollable monospace block. The heading
 // tracks the run's status so a cancelled-with-cause run doesn't claim it
 // "failed".
-function FailureBanner({ status, message }) {
+function FailureBanner({ run }) {
+  const message = run?.error_message;
   if (!message) return null;
-  const heading = status === "cancelled" ? "Run cancelled" : "Run failed";
+  const heading = run.status === "cancelled" ? "Run cancelled" : "Run failed";
   return (
     <div style={{
       margin: "12px 24px 0", padding: "12px 14px",
@@ -52,6 +54,14 @@ function FailureBanner({ status, message }) {
         fontFamily: "'JetBrains Mono',monospace",
         color: "var(--text-muted)",
       }}>{message}</pre>
+      {/* One-click bug report pre-filled with this run's error + the
+          environment diagnostics. */}
+      <div style={{ marginTop: 10 }}>
+        <ReportBugButton
+          run={{ id: run.id, status: run.status, error_message: message }}
+          compact
+        />
+      </div>
     </div>
   );
 }
@@ -169,7 +179,7 @@ function RunDetailView({ runId, onBack }) {
         onCancel={fetchSummary}
       />
 
-      <FailureBanner status={run.status} message={run.error_message} />
+      <FailureBanner run={run} />
 
       <StatsCards
         run={run}

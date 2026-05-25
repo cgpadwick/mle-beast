@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 
 import { Card } from "../primitives.jsx";
+import { ReportBugButton } from "../BugReport.jsx";
 
 // Field metadata: group label + per-field hint + display label override
 // (key snake_case can be ugly to read directly).
@@ -214,6 +215,17 @@ function SettingsView({ onClose }) {
       )}
 
       {tab === "admin" && <AdminTab />}
+
+      {/* Bug reporting — always visible under both tabs. Opens a GitHub
+          issue pre-filled with auto-collected diagnostics (no secrets). */}
+      <Card style={{ padding: 16, marginTop: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Found a bug?</div>
+        <div style={{ fontSize: 11, color: "var(--text-subtle)", marginBottom: 10 }}>
+          Opens a GitHub issue pre-filled with your version + environment
+          (provider/model name only — never API keys).
+        </div>
+        <ReportBugButton />
+      </Card>
     </div>
   );
 }

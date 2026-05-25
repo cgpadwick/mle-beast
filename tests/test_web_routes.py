@@ -280,6 +280,25 @@ class TestRunsRoutes:
         v = r.json().get("version")
         assert isinstance(v, str) and v  # non-empty string
 
+    def test_diagnostics_endpoint(self, client, monkeypatch):
+        from mle_beast import cuda_detection as cd
+        from mle_beast import settings as settings_mod
+        monkeypatch.setattr(cd, "detect_cuda_version", lambda: (12, 6))
+        monkeypatch.setattr(
+            settings_mod, "get_settings",
+            lambda: settings_mod.Settings(model_provider="openrouter", model_name="deepseek/x"),
+        )
+        r = client.get("/api/diagnostics")
+        assert r.status_code == 200
+        d = r.json()
+        for k in ("version", "install", "os", "python", "gpu", "provider", "model"):
+            assert k in d, f"missing diagnostics key: {k}"
+        assert d["gpu"] == "CUDA 12.6"
+        assert d["install"] in ("docker", "native")
+        # No secrets must leak into diagnostics.
+        blob = " ".join(str(v) for v in d.values()).lower()
+        assert "api_key" not in blob and "sk-" not in blob
+
     def test_list_runs_empty(self, client):
         r = client.get("/api/runs")
         assert r.status_code == 200
