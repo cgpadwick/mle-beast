@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { API } from "./api.js";
 
 const NEW_ISSUE = "https://github.com/cgpadwick/mle-beast/issues/new";
-const BODY_LIMIT = 6000;   // keep the prefill URL comfortably under ~8 KB
+const MAX_URL = 7500;      // cap on the ENCODED prefill URL (GitHub caps ~8 KB)
 const ERR_LIMIT = 1500;    // cap the inlined error excerpt
 
 function envBlock(diag) {
@@ -59,12 +59,18 @@ function issueUrl(diag, run) {
   const title = run
     ? `[Bug] run ${String(run.id).slice(0, 8)} — ${run.status}`
     : "[Bug] ";
+  // Measure the *encoded* URL (percent-encoding inflates newlines/backticks/
+  // Unicode ~3×), and shrink the body until the whole URL fits under the cap.
+  const make = (b) => `${NEW_ISSUE}?${new URLSearchParams({ title, body: b, labels: "bug" })}`;
   let body = buildBody(diag, run);
-  if (body.length > BODY_LIMIT) {
-    body = body.slice(0, BODY_LIMIT) + "\n\n…(truncated — use “Copy diagnostics” and paste the rest)";
+  if (make(body).length > MAX_URL) {
+    const note = "\n\n…(truncated — use “Copy diagnostics” and paste the rest)";
+    while (body && make(body + note).length > MAX_URL) {
+      body = body.slice(0, -200);
+    }
+    body += note;
   }
-  const p = new URLSearchParams({ title, body, labels: "bug" });
-  return `${NEW_ISSUE}?${p.toString()}`;
+  return make(body);
 }
 
 /**
