@@ -36,22 +36,17 @@ export default function App() {
             fixed-position so they stay reachable from any view without
             the underlying layout needing to make room.
 
-            Two-context styling:
-              - On the runs list view, the cluster sits on top of the
-                hero banner, which is hardcoded `backgroundColor: "#000"`
-                in BOTH themes (design choice — the gravitational-waves
-                photo needs the dark canvas). So in light mode the
-                normally-dark buttons would vanish on the black hero.
-                When view === "list" we force the "dark context" style
-                (light frosted button on dark) regardless of theme.
-              - On every other view (detail, new, settings) the cluster
-                is over the regular page bg and we use theme-aware
-                styling. */}
+            Styling has two contexts:
+              - Over a DARK hero: on the runs list in dark mode the cluster
+                sits on the black hero banner, where the theme-aware (dark)
+                button would vanish — so we force a light-frosted-on-dark
+                style. The hero is only dark in dark mode now (it's a light
+                tint in light mode, see --hero-bg), so this is gated on
+                `view === "list" && theme === "dark"`.
+              - Everywhere else (all other views, and the list view in light
+                mode where the hero is light) the cluster is over a
+                theme-matched background, so we use theme-aware styling. */}
         {(() => {
-        // The list view's hero is dark only in dark mode now (it's a light
-        // tint in light mode), so only force the light-frosted-on-dark
-        // button style when the hero is actually dark. Otherwise the cluster
-        // follows the theme like every other view.
         const onHero = view === "list" && theme === "dark";
         const btnBg = onHero
           ? "rgba(255,255,255,0.14)"
