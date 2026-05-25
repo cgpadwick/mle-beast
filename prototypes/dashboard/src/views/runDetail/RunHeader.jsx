@@ -125,6 +125,24 @@ function RunHeader({ run, runId, stageMap, activeStageKey, peak, onBack, onCance
             padding: "6px 14px", borderRadius: 8, cursor: "pointer",
           }}>Cancel Run</button>
         )}
+        {/* Delete — finished runs only (cancel a running one first). Confirms,
+            removes the run + its history, then returns to the list. */}
+        {run.status !== "running" && run.status !== "pending" && (
+          <button
+            title="Delete this run and its history"
+            onClick={() => {
+              const label = (run.task || runId.slice(0, 8)).slice(0, 60);
+              if (!confirm(`Delete this run?\n\n${label}\n\nThis removes its history and can't be undone.`)) return;
+              API.deleteRun(runId).then(onBack).catch(() => {});
+            }}
+            style={{
+              background: "rgba(248,113,113,0.1)",
+              border: "1px solid rgba(248,113,113,0.3)",
+              color: "#fca5a5", fontSize: 12, fontWeight: 600,
+              padding: "6px 14px", borderRadius: 8, cursor: "pointer",
+            }}
+          >Delete</button>
+        )}
       </div>
     </div>
     {reportData && (

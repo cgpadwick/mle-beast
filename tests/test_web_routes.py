@@ -71,11 +71,17 @@ class _FakeRunManager:
     cancelled: list = field(default_factory=list)
     cancel_returns_true: bool = True
 
-    def list_runs(self, status=None):
+    def list_runs(self, status=None, limit=50, offset=0):
         all_runs = list(self.runs.values())
         if status:
             all_runs = [r for r in all_runs if r.status == status]
-        return all_runs
+        return all_runs[offset:offset + limit]
+
+    def count_runs(self, status=None):
+        all_runs = list(self.runs.values())
+        if status:
+            all_runs = [r for r in all_runs if r.status == status]
+        return len(all_runs)
 
     def get_run(self, run_id):
         return self.runs.get(run_id)
@@ -224,7 +230,7 @@ class TestSpaMount:
         r = client.get("/api/runs")
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("application/json")
-        assert r.json() == []  # fake_manager has no runs
+        assert r.json()["runs"] == []  # fake_manager has no runs
 
     def test_unknown_api_route_404s_without_falling_through(self, client):
         """A request to /api/<nonexistent> should be a clean 404 from the
@@ -302,13 +308,13 @@ class TestRunsRoutes:
     def test_list_runs_empty(self, client):
         r = client.get("/api/runs")
         assert r.status_code == 200
-        assert r.json() == []
+        assert r.json() == {"runs": [], "total": 0, "limit": 50, "offset": 0}
 
     def test_list_runs_includes_peak_per_row(self, client, fake_manager):
         fake_manager.runs["r-1"] = _make_run_info(id="r-1")
         fake_manager.peak["r-1"] = {"score": 0.93, "step": 5}
         r = client.get("/api/runs")
-        body = r.json()
+        body = r.json()["runs"]
         assert len(body) == 1
         assert body[0]["id"] == "r-1"
         assert body[0]["peak"] == {"score": 0.93, "step": 5}
@@ -317,8 +323,23 @@ class TestRunsRoutes:
         fake_manager.runs["a"] = _make_run_info(id="a", status="completed")
         fake_manager.runs["b"] = _make_run_info(id="b", status="failed")
         r = client.get("/api/runs?status=completed")
-        ids = [row["id"] for row in r.json()]
+        ids = [row["id"] for row in r.json()["runs"]]
         assert ids == ["a"]
+
+    def test_list_runs_pagination(self, client, fake_manager):
+        for i in range(5):
+            fake_manager.runs[f"r{i}"] = _make_run_info(id=f"r{i}")
+        page0 = client.get("/api/runs?limit=2&offset=0").json()
+        page1 = client.get("/api/runs?limit=2&offset=2").json()
+        # total ignores limit/offset
+        assert page0["total"] == 5 and page1["total"] == 5
+        assert page1["limit"] == 2 and page1["offset"] == 2
+        assert len(page0["runs"]) == 2 and len(page1["runs"]) == 2
+        # offset must actually advance the window — disjoint ids prove it
+        # (a impl that respects limit but ignores offset would fail here).
+        ids0 = {r["id"] for r in page0["runs"]}
+        ids1 = {r["id"] for r in page1["runs"]}
+        assert ids0.isdisjoint(ids1)
 
     def test_create_run_starts_in_background(self, client, fake_manager):
         body = {"workspace": "/tmp/x", "task": "test it"}

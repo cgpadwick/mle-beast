@@ -255,19 +255,33 @@ class Database:
         )
         conn.commit()
 
-    def list_runs(self, status: Optional[str] = None, limit: int = 50) -> list[dict]:
+    def list_runs(
+        self, status: Optional[str] = None, limit: int = 50, offset: int = 0,
+    ) -> list[dict]:
         conn = self._get_conn()
         if status:
             rows = conn.execute(
-                "SELECT * FROM runs WHERE status = ? ORDER BY created_at DESC LIMIT ?",
-                (status, limit),
+                "SELECT * FROM runs WHERE status = ? "
+                "ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (status, limit, offset),
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT * FROM runs ORDER BY created_at DESC LIMIT ?",
-                (limit,),
+                "SELECT * FROM runs ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (limit, offset),
             ).fetchall()
         return [dict(r) for r in rows]
+
+    def count_runs(self, status: Optional[str] = None) -> int:
+        """Total run count (optionally filtered) — for pagination math."""
+        conn = self._get_conn()
+        if status:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM runs WHERE status = ?", (status,),
+            ).fetchone()
+        else:
+            row = conn.execute("SELECT COUNT(*) FROM runs").fetchone()
+        return int(row[0])
 
     # ------------------------------------------------------------------
     # Stages
