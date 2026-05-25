@@ -146,10 +146,12 @@ def register_routes(app: FastAPI) -> None:
         # Preflight the workspace path itself. The runner mkdir's it at run
         # start, so an uncreatable path (e.g. under an unwritable root) would
         # otherwise crash the run with a mid-pipeline PermissionError. Fail
-        # fast with a clear 400 instead.
+        # fast with a clear 400 instead. Persist the RESOLVED path (not the
+        # raw input) so "~/run" / relative inputs are validated and created
+        # at the same place — the runner uses the stored string verbatim.
         from mle_beast.workspace import validate_workspace_path
         try:
-            validate_workspace_path(req.workspace)
+            workspace = str(validate_workspace_path(req.workspace))
         except RuntimeError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -180,13 +182,13 @@ def register_routes(app: FastAPI) -> None:
         elif not req.setup_workspace:
             from mle_beast.workspace import check_workspace_env
             try:
-                check_workspace_env(req.workspace, mode=req.mode)
+                check_workspace_env(workspace, mode=req.mode)
             except RuntimeError as e:
                 raise HTTPException(status_code=400, detail=str(e)) from e
 
         manager = get_run_manager()
         config = RunConfig(
-            workspace=req.workspace,
+            workspace=workspace,
             task=req.task,
             target_accuracy=req.target_accuracy,
             dataset_path=req.dataset_path,

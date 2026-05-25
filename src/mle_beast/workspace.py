@@ -187,6 +187,20 @@ def suggested_workspace_root() -> Optional[str]:
     return None
 
 
+def _exists_safe(path: Path) -> bool:
+    """``Path.exists()`` that treats a permission error as non-existent.
+
+    ``exists()`` re-raises EACCES (it can't ``stat`` through a directory that
+    lacks search/execute permission), so calling it on a path under such a
+    directory would leak a PermissionError. We want those to flow into the
+    "not writable" check and produce a clean RuntimeError instead.
+    """
+    try:
+        return path.exists()
+    except OSError:
+        return False
+
+
 def validate_workspace_path(workspace: _PathLike) -> Path:
     """Validate that a run's workspace path can actually be created/written.
 
@@ -231,15 +245,10 @@ def validate_workspace_path(workspace: _PathLike) -> Path:
     # write but no execute would pass a W_OK-only check yet still fail mkdir.
     needed = os.W_OK | os.X_OK
 
-    # exists() itself can raise PermissionError when an ancestor lacks search
-    # (x) permission — treat that as "not accessible" and fall through to the
-    # ancestor check below, which surfaces the unwritable parent cleanly.
-    try:
-        exists = p.exists()
-    except OSError:
-        exists = False
-
-    if exists:
+    # _exists_safe treats a missing-search-permission ancestor as
+    # "not accessible" so the unwritable-parent check below produces a clean
+    # RuntimeError rather than letting PermissionError leak as a 500.
+    if _exists_safe(p):
         if not p.is_dir():
             raise RuntimeError(
                 f"workspace path exists but is not a directory: {p}"
@@ -251,9 +260,9 @@ def validate_workspace_path(workspace: _PathLike) -> Path:
     # Doesn't exist yet — walk up to the nearest existing ancestor and make
     # sure mkdir -p could create the path under it.
     ancestor = p.parent
-    while not ancestor.exists() and ancestor != ancestor.parent:
+    while not _exists_safe(ancestor) and ancestor != ancestor.parent:
         ancestor = ancestor.parent
-    if not ancestor.exists() or not ancestor.is_dir():
+    if not _exists_safe(ancestor) or not ancestor.is_dir():
         raise RuntimeError(f"cannot create workspace {p}: no usable parent directory.{tip}")
     if not os.access(str(ancestor), needed):
         raise RuntimeError(
