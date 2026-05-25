@@ -128,10 +128,11 @@ function LLMTracePanel({ events, runStart }) {
   return (
     <div style={{ flex: 1, overflow: "auto", padding: "10px 12px" }}>
       {calls.map(c => (
-        // Stable per-call key (the call's timestamp) so a new call streaming
-        // in at the top doesn't remount the others and reset their expanded
-        // state. All collapsed by default — clicking is the only thing that
-        // expands a card, so a new arrival never pops open under you.
+        // Stable per-call key (the event DB id, falling back to timestamp)
+        // so a new call streaming in at the top doesn't remount the others
+        // and reset their expanded state. All collapsed by default — clicking
+        // is the only thing that expands a card, so a new arrival never pops
+        // open under you.
         <LLMCallCard
           key={c._eid ?? c.timestamp}
           call={c}

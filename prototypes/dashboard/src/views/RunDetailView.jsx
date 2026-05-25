@@ -111,7 +111,13 @@ function RunDetailView({ runId, onBack }) {
     }, 800);
   }, [fetchSummary]);
   useRunSSE(runId, handleSse);
-  useEffect(() => () => { if (sseTimer.current) clearTimeout(sseTimer.current); }, []);
+  // Clear a pending debounce when fetchSummary (i.e. runId) changes too, not
+  // just on unmount — otherwise a timer scheduled for the previous run could
+  // fire its stale fetchSummary, and the `return` guard would block new
+  // events until it did.
+  useEffect(() => () => {
+    if (sseTimer.current) { clearTimeout(sseTimer.current); sseTimer.current = null; }
+  }, [fetchSummary]);
 
   // SSE-fallback polling. The EventBus is process-local — runs launched
   // outside the web server's process (e.g. via pytest or a separate CLI)
