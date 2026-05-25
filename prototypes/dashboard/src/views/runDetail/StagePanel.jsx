@@ -147,13 +147,29 @@ function SelectedExperimentCard({ exp }) {
   );
 }
 
+// verdict_json carries the critic's feedback on a retry (a JSON object with
+// a "feedback" string). Returns the feedback text, or null when verdict_json
+// is absent / not the retry shape (e.g. a terminal verdict stringified).
+function parseStageFeedback(verdictJson) {
+  if (!verdictJson) return null;
+  try {
+    const o = JSON.parse(verdictJson);
+    return o && typeof o.feedback === "string" ? o.feedback : null;
+  } catch {
+    return null;
+  }
+}
+
 function GenericStageCard({ stage, stageMap, run }) {
   const s = stageMap[stage];
+  const retrying = s?.status === "retrying";
+  const feedback = parseStageFeedback(s?.verdict_json);
   return (
     <div>
       <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>{stage}</h3>
       <Card style={{ padding: 16 }}>
-        <Row label="Status" value={s?.status || "—"} />
+        <Row label="Status"
+             value={retrying ? `retrying (${s.attempt}/${s.max_attempts})` : (s?.status || "—")} />
         <Row label="Started"
              value={s?.started_at ? fmtRelTime(s.started_at, run.started_at) : "—"} />
         <Row label="Completed"
@@ -162,6 +178,27 @@ function GenericStageCard({ stage, stageMap, run }) {
           <Row label="Attempt" value={`${s.attempt} / ${s.max_attempts}`} />
         )}
       </Card>
+      {feedback && (
+        <Card style={{
+          padding: 16, marginTop: 12,
+          border: "1px solid rgba(251,191,36,0.35)",
+          background: "rgba(251,191,36,0.06)",
+        }}>
+          <div style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: "1px",
+            color: "var(--status-warn-fg)", marginBottom: 6,
+            fontFamily: "'JetBrains Mono',monospace",
+          }}>
+            {retrying ? "CRITIC FEEDBACK — RETRYING" : "CRITIC FEEDBACK"}
+          </div>
+          <div style={{
+            fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5,
+            whiteSpace: "pre-wrap", fontFamily: "'JetBrains Mono',monospace",
+          }}>
+            {feedback}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
