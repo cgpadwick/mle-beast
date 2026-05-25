@@ -236,7 +236,8 @@ function ConsolePanel({ runId, isRunning }) {
   const [text, setText] = useState("");
   const [exists, setExists] = useState(true);
   const [truncated, setTruncated] = useState(false);
-  const offsetRef = useRef(0);
+  const offsetRef = useRef(0);   // byte offset into the file (server's unit)
+  const charsRef = useRef(0);    // total CHARS received (the cap's unit)
   const preRef = useRef(null);
   const stickyBottomRef = useRef(true);
 
@@ -246,6 +247,7 @@ function ConsolePanel({ runId, isRunning }) {
     setExists(true);
     setTruncated(false);
     offsetRef.current = 0;
+    charsRef.current = 0;
   }, [runId]);
 
   useEffect(() => {
@@ -278,15 +280,19 @@ function ConsolePanel({ runId, isRunning }) {
             return next;
           });
           offsetRef.current = data.size;
-          // Truncation note is driven by the file size (monotonic), not a
-          // side effect inside the state updater. data.size is the full file
-          // length, so once it exceeds the cap we're definitely trimming.
-          setTruncated(data.size > CONSOLE_MAX_CHARS);
+          // Drive the trimmed banner from CHARS (the same unit as the cap +
+          // the slice above), not the byte-based data.size — otherwise
+          // multi-byte UTF-8 output could flag truncation when nothing was
+          // actually trimmed. Done outside the updater to keep it pure.
+          charsRef.current += data.text.length;
+          setTruncated(charsRef.current > CONSOLE_MAX_CHARS);
         } else if (typeof data.size === "number") {
-          // Server may have truncated; sync offset just in case.
+          // Server may have truncated/rotated; resync from the top.
           if (data.size < offsetRef.current) {
             offsetRef.current = 0;
+            charsRef.current = 0;
             setText("");
+            setTruncated(false);
           }
         }
       } catch {
@@ -340,7 +346,7 @@ function ConsolePanel({ runId, isRunning }) {
           padding: "4px 14px", borderBottom: "1px solid var(--border)",
           fontFamily: "'JetBrains Mono',monospace", flexShrink: 0,
         }}>
-          showing the most recent {Math.round(CONSOLE_MAX_CHARS / 1024)} KB — older lines trimmed for performance
+          showing the most recent output — older lines trimmed for performance
         </div>
       )}
       <pre ref={preRef} style={{
