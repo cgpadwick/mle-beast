@@ -24,9 +24,12 @@ import { StagePanel } from "./runDetail/StagePanel.jsx";
 // rare cancelled-with-cause). Without this the error was captured in the
 // DB and returned by the API but never rendered — a failed run looked
 // like a status pill and nothing else. The message is often a multi-line
-// traceback, so render it in a scrollable monospace block.
-function FailureBanner({ message }) {
+// traceback, so render it in a scrollable monospace block. The heading
+// tracks the run's status so a cancelled-with-cause run doesn't claim it
+// "failed".
+function FailureBanner({ status, message }) {
   if (!message) return null;
+  const heading = status === "cancelled" ? "Run cancelled" : "Run failed";
   return (
     <div style={{
       margin: "12px 24px 0", padding: "12px 14px",
@@ -40,7 +43,7 @@ function FailureBanner({ message }) {
         marginBottom: 8,
       }}>
         <span aria-hidden style={{ fontSize: 13 }}>✗</span>
-        Run failed
+        {heading}
       </div>
       <pre style={{
         margin: 0, maxHeight: 220, overflow: "auto",
@@ -166,7 +169,7 @@ function RunDetailView({ runId, onBack }) {
         onCancel={fetchSummary}
       />
 
-      <FailureBanner message={run.error_message} />
+      <FailureBanner status={run.status} message={run.error_message} />
 
       <StatsCards
         run={run}

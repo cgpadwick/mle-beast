@@ -143,14 +143,21 @@ def register_routes(app: FastAPI) -> None:
 
     @app.post("/api/runs")
     async def api_create_run(req: CreateRunRequest):
+        # Normalize the BYO env path once: a whitespace-only value (e.g.
+        # "   ") is treated as "not provided" so it can't slip past
+        # validation and then get stored as a bogus env path. The same
+        # normalized `env` drives validation, preflight branching, and the
+        # RunConfig below.
+        env = (req.environment or "").strip() or None
+
         # Preflight-validate the user's environment path (if given) so they
         # get an immediate 400 with a clear message instead of seeing the
         # run fail seconds later. The pipeline runner re-validates anyway
         # — this is purely a UX nicety.
-        if req.environment and req.environment.strip():
+        if env:
             from mle_beast.workspace import validate_environment_path
             try:
-                validate_environment_path(req.environment.strip())
+                validate_environment_path(env)
             except RuntimeError as e:
                 raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -178,7 +185,7 @@ def register_routes(app: FastAPI) -> None:
             setup_workspace=req.setup_workspace,
             lower_is_better=req.lower_is_better,
             metric_name=req.metric_name,
-            environment=req.environment,
+            environment=env,
         )
         run_id = manager.create_run(config)
         manager.start_run(run_id)

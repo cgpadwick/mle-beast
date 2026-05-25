@@ -367,6 +367,25 @@ class TestRunsRoutes:
         assert r.status_code == 201
         assert len(fake_manager.created) == 1
 
+    def test_create_run_blank_environment_treated_as_unset(
+        self, client, fake_manager, monkeypatch,
+    ):
+        """A whitespace-only `environment` must not slip past validation and
+        must be normalized to None (not stored as "   ").
+        """
+        called = []
+        monkeypatch.setattr(
+            "mle_beast.workspace.validate_environment_path",
+            lambda p: called.append(p),
+        )
+        r = client.post("/api/runs", json={
+            "workspace": "/tmp/x", "task": "x",
+            "environment": "   ", "setup_workspace": True,
+        })
+        assert r.status_code == 201
+        assert called == []  # blank env → validation skipped entirely
+        assert fake_manager.created[0].environment is None
+
     def test_create_run_preflights_environment(
         self, client, fake_manager, monkeypatch, tmp_path,
     ):

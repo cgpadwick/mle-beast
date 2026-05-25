@@ -62,7 +62,9 @@ function NewRunView({ onCreated, onCancel }) {
       if (res.id) onCreated(res.id);
       else setError(JSON.stringify(res));
     } catch (err) {
-      setError(String(err));
+      // Show the server's detail verbatim (createRun throws Error(detail))
+      // — err.message avoids the "Error: " prefix String(err) would add.
+      setError(err?.message || String(err));
     } finally {
       setSubmitting(false);
     }
