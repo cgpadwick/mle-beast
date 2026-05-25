@@ -96,6 +96,108 @@ def test_greenfield_does_not_require_evaluate_py(tmp_path):
 
 
 # ----------------------------------------------------------------
+# validate_workspace_path: fail-fast on un-creatable run workspaces
+# ----------------------------------------------------------------
+
+class TestValidateWorkspacePath:
+    def test_existing_writable_dir_ok(self, tmp_path):
+        from mle_beast.workspace import validate_workspace_path
+        assert validate_workspace_path(tmp_path) == tmp_path.resolve()
+
+    def test_creatable_under_writable_parent_ok(self, tmp_path):
+        """A not-yet-existing path under a writable dir validates (mkdir -p
+        would succeed) without actually being created."""
+        from mle_beast.workspace import validate_workspace_path
+        target = tmp_path / "deep" / "nested" / "run"
+        assert validate_workspace_path(target) == target.resolve()
+        assert not target.exists()  # validation must not create it
+
+    def test_empty_path_raises(self):
+        from mle_beast.workspace import validate_workspace_path
+        with pytest.raises(RuntimeError, match=r"no workspace path"):
+            validate_workspace_path("   ")
+
+    def test_path_is_a_file_raises(self, tmp_path):
+        from mle_beast.workspace import validate_workspace_path
+        f = tmp_path / "afile"
+        f.write_text("x")
+        with pytest.raises(RuntimeError, match=r"not a directory"):
+            validate_workspace_path(f)
+
+    @pytest.mark.skipif(
+        hasattr(__import__("os"), "geteuid") and __import__("os").geteuid() == 0,
+        reason="root bypasses directory write permissions",
+    )
+    def test_unwritable_parent_raises(self, tmp_path):
+        """Nearest existing ancestor unwritable → can't mkdir → clear error."""
+        import os
+
+        from mle_beast.workspace import validate_workspace_path
+        locked = tmp_path / "locked"
+        locked.mkdir()
+        os.chmod(locked, 0o500)  # r-x: can't create children
+        try:
+            with pytest.raises(RuntimeError, match=r"not writable"):
+                validate_workspace_path(locked / "run")
+        finally:
+            os.chmod(locked, 0o700)  # restore so tmp_path cleanup works
+
+    @pytest.mark.skipif(
+        hasattr(__import__("os"), "geteuid") and __import__("os").geteuid() == 0,
+        reason="root bypasses directory permission bits",
+    )
+    def test_parent_writable_but_not_searchable_raises(self, tmp_path):
+        """Write without execute (search) can't create children either —
+        the check must require W_OK | X_OK, not W_OK alone."""
+        import os
+
+        from mle_beast.workspace import validate_workspace_path
+        nox = tmp_path / "nox"
+        nox.mkdir()
+        os.chmod(nox, 0o600)  # rw-, no execute: mkdir of a child fails
+        try:
+            with pytest.raises(RuntimeError, match=r"not writable"):
+                validate_workspace_path(nox / "run")
+        finally:
+            os.chmod(nox, 0o700)
+
+
+class TestSuggestedWorkspaceRoot:
+    """suggested_workspace_root() must only claim /workspaces when it's an
+    actual mount — not a plain dir a native user happens to have created."""
+
+    def _patch(self, monkeypatch, *, is_dir, ws_dev, parent_dev):
+        from pathlib import Path as _Path
+
+        from mle_beast import workspace as ws
+
+        monkeypatch.setattr(_Path, "is_dir", lambda self: is_dir)
+        monkeypatch.setattr(ws.os, "access", lambda p, m: True)
+
+        class _St:
+            def __init__(self, dev):
+                self.st_dev = dev
+
+        monkeypatch.setattr(
+            ws.os, "stat",
+            lambda p: _St(ws_dev if str(p) == "/workspaces" else parent_dev),
+        )
+        return ws
+
+    def test_returns_root_when_mounted(self, monkeypatch):
+        ws = self._patch(monkeypatch, is_dir=True, ws_dev=42, parent_dev=1)
+        assert ws.suggested_workspace_root() == "/workspaces"
+
+    def test_none_for_plain_dir_same_device(self, monkeypatch):
+        ws = self._patch(monkeypatch, is_dir=True, ws_dev=1, parent_dev=1)
+        assert ws.suggested_workspace_root() is None
+
+    def test_none_when_not_a_dir(self, monkeypatch):
+        ws = self._patch(monkeypatch, is_dir=False, ws_dev=42, parent_dev=1)
+        assert ws.suggested_workspace_root() is None
+
+
+# ----------------------------------------------------------------
 # _clone_ml_frameworks: bundled-cache fast path
 # ----------------------------------------------------------------
 
