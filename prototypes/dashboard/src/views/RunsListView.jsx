@@ -45,6 +45,14 @@ function RunsListView({ onOpen, onNew, onHome }) {
   }, []);
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // Snap back into range when total shrinks below the current page (e.g.
+  // deleting the last run on the last page) — otherwise refresh() keeps
+  // requesting an out-of-range offset and shows an empty page.
+  useEffect(() => {
+    if (page > pageCount - 1) setPage(pageCount - 1);
+  }, [page, pageCount]);
+
   // Active runs are the newest, so they only ever appear on page 0.
   const liveCount = page === 0
     ? runs.filter(r => r.status === "running" || r.status === "pending").length
@@ -319,14 +327,21 @@ function RunRowArchived({ run, onOpen, onDelete, isLast }) {
   // Compact single-line row for completed/failed/cancelled runs. Less
   // visual weight per row so a long history scans quickly.
   return (
-    <button onClick={() => onOpen(run.id)} style={{
-      width: "100%", padding: "9px 14px", display: "flex", alignItems: "center",
-      gap: 12, cursor: "pointer", background: "transparent",
-      border: "none", borderBottom: isLast ? "none" : "1px solid var(--border-subtle)",
-      color: "inherit", fontFamily: "inherit", textAlign: "left",
-    }}
-    onMouseEnter={e => { e.currentTarget.style.background = "var(--surface-strong)"; }}
-    onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+    // role="button" div (not a <button>) so the nested delete control can be
+    // a real <button> — interactive elements may not be nested in a <button>.
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(run.id)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(run.id); } }}
+      style={{
+        width: "100%", padding: "9px 14px", display: "flex", alignItems: "center",
+        gap: 12, cursor: "pointer", background: "transparent",
+        borderBottom: isLast ? "none" : "1px solid var(--border-subtle)",
+        color: "inherit", textAlign: "left",
+      }}
+      onMouseEnter={e => { e.currentTarget.style.background = "var(--surface-strong)"; }}
+      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
     >
       <span style={{ width: 78, flexShrink: 0, display: "flex", alignItems: "center" }}>
         <StatusPill status={run.status} />
@@ -358,20 +373,18 @@ function RunRowArchived({ run, onOpen, onDelete, isLast }) {
         fontFamily: "'JetBrains Mono',monospace", flexShrink: 0, width: 70,
         textAlign: "right",
       }}>{fmtDuration(run.started_at, run.completed_at)}</span>
-      {/* Delete affordance. A <span role="button"> (not <button>) so it's
-          valid nested inside the row button; stopPropagation keeps the click
-          from opening the run. */}
-      <span
-        role="button"
-        tabIndex={0}
+      {/* Real <button> (valid now that the row is a div). stopPropagation
+          keeps the click from opening the run. */}
+      <button
+        type="button"
         title="Delete this run"
         onClick={(e) => { e.stopPropagation(); onDelete(run); }}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); e.preventDefault(); onDelete(run); } }}
         onMouseEnter={(e) => { e.currentTarget.style.color = "var(--status-fail-fg)"; e.currentTarget.style.background = "rgba(248,113,113,0.14)"; }}
         onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; e.currentTarget.style.background = "transparent"; }}
         style={{
           flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
           width: 26, height: 26, borderRadius: 6, cursor: "pointer",
+          border: "none", padding: 0,
           color: "var(--text-muted)", background: "transparent", transition: "all 0.12s",
         }}
       >
@@ -381,8 +394,8 @@ function RunRowArchived({ run, onOpen, onDelete, isLast }) {
           <line x1="10" y1="11" x2="10" y2="17" />
           <line x1="14" y1="11" x2="14" y2="17" />
         </svg>
-      </span>
-    </button>
+      </button>
+    </div>
   );
 }
 

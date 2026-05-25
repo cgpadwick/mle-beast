@@ -329,11 +329,17 @@ class TestRunsRoutes:
     def test_list_runs_pagination(self, client, fake_manager):
         for i in range(5):
             fake_manager.runs[f"r{i}"] = _make_run_info(id=f"r{i}")
-        r = client.get("/api/runs?limit=2&offset=2")
-        body = r.json()
-        assert body["total"] == 5          # total ignores limit/offset
-        assert body["limit"] == 2 and body["offset"] == 2
-        assert len(body["runs"]) == 2      # this page only
+        page0 = client.get("/api/runs?limit=2&offset=0").json()
+        page1 = client.get("/api/runs?limit=2&offset=2").json()
+        # total ignores limit/offset
+        assert page0["total"] == 5 and page1["total"] == 5
+        assert page1["limit"] == 2 and page1["offset"] == 2
+        assert len(page0["runs"]) == 2 and len(page1["runs"]) == 2
+        # offset must actually advance the window — disjoint ids prove it
+        # (a impl that respects limit but ignores offset would fail here).
+        ids0 = {r["id"] for r in page0["runs"]}
+        ids1 = {r["id"] for r in page1["runs"]}
+        assert ids0.isdisjoint(ids1)
 
     def test_create_run_starts_in_background(self, client, fake_manager):
         body = {"workspace": "/tmp/x", "task": "test it"}
