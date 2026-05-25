@@ -4,7 +4,7 @@
 // GitHub's prefill URL caps around 8 KB, so long error text can't all ride
 // in the URL.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { API } from "./api.js";
 
@@ -102,6 +102,7 @@ function copyText(text) {
 function ReportBugButton({ run, compact }) {
   const [diag, setDiag] = useState(null);
   const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef(null);
 
   // Prefetch diagnostics on mount so the click handlers stay SYNCHRONOUS.
   // window.open / clipboard writes must happen inside the user gesture — an
@@ -110,6 +111,11 @@ function ReportBugButton({ run, compact }) {
     let cancelled = false;
     API.getDiagnostics().then(d => { if (!cancelled) setDiag(d); }).catch(() => {});
     return () => { cancelled = true; };
+  }, []);
+
+  // Clear any pending "Copied ✓" reset timer on unmount.
+  useEffect(() => () => {
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
   }, []);
 
   const open = () => {
@@ -129,7 +135,11 @@ function ReportBugButton({ run, compact }) {
 
   const copy = () => {
     copyText(buildBody(diag, run))
-      .then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); })
+      .then(() => {
+        setCopied(true);
+        if (copiedTimer.current) clearTimeout(copiedTimer.current);
+        copiedTimer.current = setTimeout(() => setCopied(false), 2000);
+      })
       .catch(() => { /* copy unavailable — the GitHub button still works */ });
   };
 
@@ -141,7 +151,7 @@ function ReportBugButton({ run, compact }) {
 
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-      <button onClick={open} style={{
+      <button type="button" onClick={open} style={{
         ...btn,
         background: "rgba(248,113,113,0.10)",
         border: "1px solid rgba(248,113,113,0.35)",
@@ -149,7 +159,7 @@ function ReportBugButton({ run, compact }) {
       }}>
         🐞 {run ? "Report this run" : "Report a bug"}
       </button>
-      <button onClick={copy} style={{
+      <button type="button" onClick={copy} style={{
         ...btn,
         background: "transparent",
         border: "1px solid var(--border)",
