@@ -33,7 +33,7 @@ function RunsListView({ onOpen, onNew, onHome }) {
         height: 144,
         marginBottom: 16,
         background: "var(--hero-bg)",
-        borderBottom: "1px solid var(--border)",
+        borderBottom: "1px solid var(--hero-border)",
         overflow: "hidden",
       }}>
         <div style={{

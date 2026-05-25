@@ -164,6 +164,9 @@ export default function App() {
           --hero-text-faint: rgba(255,255,255,0.4);
           --hero-text-shadow: 0 2px 10px rgba(0,0,0,0.5);
           --hero-subtext-shadow: 0 1px 3px rgba(0,0,0,0.6);
+          /* No separator in dark — the black hero already reads as its own
+             band, and this keeps dark mode pixel-identical to before. */
+          --hero-border: transparent;
         }
         .theme-light {
           --bg: #f5f7fb;
@@ -192,6 +195,9 @@ export default function App() {
           --hero-text-faint: rgba(15,23,42,0.4);
           --hero-text-shadow: none;
           --hero-subtext-shadow: none;
+          /* Light: a subtle separator so the tinted hero reads as distinct
+             from the page below it. */
+          --hero-border: rgba(15,23,42,0.08);
         }
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
