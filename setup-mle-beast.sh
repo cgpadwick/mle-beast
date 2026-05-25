@@ -105,7 +105,35 @@ while [ $# -gt 0 ]; do
     --data-dir=*)          DATA_DIR="${1#*=}" ;;
     --workspaces-dir=*)    WORKSPACES_DIR="${1#*=}" ;;
     -h|--help)
-      sed -n '/^# mle-beast quickstart wizard\./,/^set -euo/p' "$0" | sed 's/^# \{0,1\}//; /^set -euo/d'
+      # When run as a file, print the header docstring straight from source.
+      # When piped (curl ... | bash), $0 is "bash" — not our script — so the
+      # sed-from-$0 trick reads the wrong file. Fall back to a static block.
+      if [ -r "$0" ] && head -n1 "$0" 2>/dev/null | grep -q '^#!'; then
+        sed -n '/^# mle-beast quickstart wizard\./,/^set -euo/p' "$0" | sed 's/^# \{0,1\}//; /^set -euo/d'
+      else
+        cat <<'EOF'
+mle-beast quickstart wizard
+
+Usage:
+  curl -fsSL https://raw.githubusercontent.com/cgpadwick/mle-beast/main/setup-mle-beast.sh | bash
+  bash setup-mle-beast.sh [--docker | --native] [flags]
+
+Flags:
+  --docker / --native        Pick install path (default: ask).
+  --yes, -y                  Accept all defaults; no prompts.
+  --openrouter-key=K         Set OPENROUTER_API_KEY.
+  --openai-key=K             Set OPENAI_API_KEY.
+  --local-llm-url=URL        Set LOCAL_LLM_BASE_URL.
+  --gpu / --no-gpu           Force GPU on/off (default: auto-detect).
+  --port=N                   Dashboard port (default: 8000).
+  --tag=T                    Image tag (default: edge).
+  --model=SLUG               Model slug.
+  --data-dir=PATH            SQLite + settings dir (default: ~/.mle-beast).
+  --workspaces-dir=PATH      Per-run workspace dir (default: ~/mle-beast-runs).
+
+Docs: https://github.com/cgpadwick/mle-beast
+EOF
+      fi
       exit 0 ;;
     *)
       fail "Unknown flag: $1 (try --help)" ;;
@@ -232,15 +260,39 @@ run_native() {
   # fails — e.g. pre-release window where mle-beast isn't on PyPI
   # yet — fall back to installing directly from the GitHub repo so
   # the script remains useful TODAY without waiting for a publish.
-  if pipx install mle-beast 2>/dev/null; then
+  #
+  # Capture full output to a temp log rather than discarding it (2>/dev/null)
+  # or truncating it (| tail -3). The pipe also masked failure: `pipx ... |
+  # tail` returns tail's exit code, so a failed install looked like success.
+  # On total failure we point the user at the log instead of telling them to
+  # re-run by hand.
+  local pipx_log
+  pipx_log=$(mktemp)
+  if pipx install mle-beast >"$pipx_log" 2>&1; then
     ok "mle-beast installed (from PyPI)"
+    rm -f "$pipx_log"
   else
     info "PyPI install didn't work (likely pre-launch); trying GitHub instead…"
-    if pipx install git+https://github.com/cgpadwick/mle-beast.git 2>&1 | tail -3; then
+    if pipx install git+https://github.com/cgpadwick/mle-beast.git >"$pipx_log" 2>&1; then
       ok "mle-beast installed (from GitHub main)"
+      rm -f "$pipx_log"
     else
-      fail "pipx install failed from both PyPI and GitHub. Check the pipx error log above."
+      warn "pipx install failed from both PyPI and GitHub."
+      info "Last lines of the install log ($pipx_log):"
+      tail -n 15 "$pipx_log" >&2
+      fail "See the full log at $pipx_log"
     fi
+  fi
+
+  # pipx may have installed the app into a bin dir (usually ~/.local/bin)
+  # that isn't on PATH yet — common when pipx itself came from apt. Catch
+  # that here so the exec below doesn't die with a bare "command not found".
+  if ! command -v mle-beast >/dev/null 2>&1; then
+    warn "mle-beast installed but not found on PATH."
+    info "pipx's app directory likely isn't on your PATH. Fix with:"
+    dim "    python3 -m pipx ensurepath"
+    info "Then open a new shell and run: mle-beast init"
+    exit 1
   fi
 
   header "Handing off to mle-beast init"
@@ -297,6 +349,21 @@ run_docker() {
     exit 1
   fi
   ok "docker compose $(docker compose version --short)"
+
+  # Daemon reachability. The CLI being present doesn't mean the daemon is
+  # running or that we can talk to it (stopped service, or user not in the
+  # docker group). Probe explicitly — otherwise detect_nvidia_runtime's
+  # `docker info` silently fails, we misreport "no GPU", and the run only
+  # blows up later at `docker compose up`.
+  if ! docker info >/dev/null 2>&1; then
+    warn "Docker is installed but the daemon isn't reachable."
+    info "Check that Docker is running and you have permission:"
+    dim "    sudo systemctl start docker          # if the service is stopped"
+    dim "    sudo usermod -aG docker \$USER        # then log out / back in"
+    info "Then re-run this script."
+    exit 1
+  fi
+  ok "docker daemon reachable"
 
   # GPU detection. If user explicitly said --no-gpu, skip. Otherwise
   # probe for the nvidia runtime; if absent and they didn't insist
@@ -553,9 +620,11 @@ write_compose_file() {
     # paths resolve against the compose file's dir, which is fine —
     # but writing absolute here lets the user `mv` the compose file
     # without breaking the mounts.)
+    # Quote the whole bind spec so host paths with spaces / : / # don't
+    # produce invalid or misparsed YAML.
     printf '    volumes:\n'
-    printf '      - %s:/home/mlebeast/.mle-beast\n' "$data_dir"
-    printf '      - %s:/workspaces\n' "$workspaces_dir"
+    printf '      - "%s:/home/mlebeast/.mle-beast"\n' "$data_dir"
+    printf '      - "%s:/workspaces"\n' "$workspaces_dir"
     if [ "$want_gpu" = "yes" ]; then
       printf '    deploy:\n'
       printf '      resources:\n'
