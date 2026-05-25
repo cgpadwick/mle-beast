@@ -1,0 +1,46 @@
+# Automated releases via release-please (https://github.com/googleapis/release-please).
+#
+# How it works:
+#   - On each push to main, release-please reads the Conventional Commits
+#     since the last release and opens/updates a "release PR" that bumps the
+#     version in pyproject.toml + .release-please-manifest.json and rolls the
+#     CHANGELOG.
+#   - When you MERGE that release PR, release-please creates the git tag
+#     (vX.Y.Z) and a GitHub Release. You control *when* to release by
+#     merging the PR; the bump/changelog/tag are automated.
+#
+# Conventional Commits drive the bump:
+#   fix: -> patch   feat: -> minor   feat!: / BREAKING CHANGE: -> major
+#   (pre-1.0 these are softened — see bump-*-pre-major in the config).
+#
+# Chaining to the Docker image build (IMPORTANT):
+#   docker-publish.yml triggers on `v*` tags. But a tag pushed by the
+#   default GITHUB_TOKEN does NOT trigger other workflows (GitHub's loop
+#   guard). To make a release auto-build :X.Y.Z / :latest, add a PAT with
+#   `contents: write` + `workflow` scope as the RELEASE_PLEASE_TOKEN secret;
+#   the tag it pushes will then trigger docker-publish. Without it, releases
+#   still tag + create the GitHub Release — just run docker-publish manually
+#   (workflow_dispatch) for the image, or it'll publish on the next main push.
+
+name: release-please
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write        # create tags + GitHub Releases, push the release PR branch
+  pull-requests: write   # open/maintain the release PR
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          # Prefer a PAT (so release tags trigger docker-publish); fall back
+          # to the built-in token, which still tags + releases.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
