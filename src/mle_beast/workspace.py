@@ -180,7 +180,9 @@ def suggested_workspace_root() -> Optional[str]:
     arbitrary host path.
     """
     p = Path("/workspaces")
-    if p.is_dir() and os.access(str(p), os.W_OK):
+    # Creating subdirs/files in a directory needs write AND execute (search)
+    # permission — W_OK alone isn't enough.
+    if p.is_dir() and os.access(str(p), os.W_OK | os.X_OK):
         return "/workspaces"
     return None
 
@@ -224,12 +226,25 @@ def validate_workspace_path(workspace: _PathLike) -> Path:
         if root else ""
     )
 
-    if p.exists():
+    # Creating entries in a directory requires write AND execute (search)
+    # permission, so both probes below check os.W_OK | os.X_OK — a dir with
+    # write but no execute would pass a W_OK-only check yet still fail mkdir.
+    needed = os.W_OK | os.X_OK
+
+    # exists() itself can raise PermissionError when an ancestor lacks search
+    # (x) permission — treat that as "not accessible" and fall through to the
+    # ancestor check below, which surfaces the unwritable parent cleanly.
+    try:
+        exists = p.exists()
+    except OSError:
+        exists = False
+
+    if exists:
         if not p.is_dir():
             raise RuntimeError(
                 f"workspace path exists but is not a directory: {p}"
             )
-        if not os.access(str(p), os.W_OK):
+        if not os.access(str(p), needed):
             raise RuntimeError(f"workspace directory is not writable: {p}{tip}")
         return p
 
@@ -240,7 +255,7 @@ def validate_workspace_path(workspace: _PathLike) -> Path:
         ancestor = ancestor.parent
     if not ancestor.exists() or not ancestor.is_dir():
         raise RuntimeError(f"cannot create workspace {p}: no usable parent directory.{tip}")
-    if not os.access(str(ancestor), os.W_OK):
+    if not os.access(str(ancestor), needed):
         raise RuntimeError(
             f"cannot create workspace {p}: the nearest existing parent "
             f"({ancestor}) is not writable.{tip}"

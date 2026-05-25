@@ -142,6 +142,25 @@ class TestValidateWorkspacePath:
         finally:
             os.chmod(locked, 0o700)  # restore so tmp_path cleanup works
 
+    @pytest.mark.skipif(
+        hasattr(__import__("os"), "geteuid") and __import__("os").geteuid() == 0,
+        reason="root bypasses directory permission bits",
+    )
+    def test_parent_writable_but_not_searchable_raises(self, tmp_path):
+        """Write without execute (search) can't create children either —
+        the check must require W_OK | X_OK, not W_OK alone."""
+        import os
+
+        from mle_beast.workspace import validate_workspace_path
+        nox = tmp_path / "nox"
+        nox.mkdir()
+        os.chmod(nox, 0o600)  # rw-, no execute: mkdir of a child fails
+        try:
+            with pytest.raises(RuntimeError, match=r"not writable"):
+                validate_workspace_path(nox / "run")
+        finally:
+            os.chmod(nox, 0o700)
+
 
 # ----------------------------------------------------------------
 # _clone_ml_frameworks: bundled-cache fast path
