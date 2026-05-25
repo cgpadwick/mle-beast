@@ -123,7 +123,16 @@ FROM base
 #    Docker's max-concurrent-downloads), vs one ~3.5 GB single-stream
 #    layer. Each COPY pulls the CONTENTS of a staging bucket into the
 #    real artifacts dir, preserving poetry's hash-path layout.
+#
+#    Create the cache dirs as mlebeast FIRST. COPY would otherwise
+#    auto-create the leading path (.cache/pypoetry/artifacts) and, on
+#    some builder versions, leave those dirs root-owned even though the
+#    copied contents get --chown'd — which makes poetry hit EACCES at
+#    runtime when it writes its HTTP cache or a not-yet-cached artifact.
+#    This RUN runs as mlebeast (inherited from base), so the whole tree
+#    is owned by the runtime user regardless of builder behavior.
 # --------------------------------------------------------------------
+RUN mkdir -p /home/mlebeast/.cache/pypoetry/artifacts
 COPY --from=cachebuilder --chown=mlebeast:mlebeast /home/mlebeast/staging/0/ /home/mlebeast/.cache/pypoetry/artifacts/
 COPY --from=cachebuilder --chown=mlebeast:mlebeast /home/mlebeast/staging/1/ /home/mlebeast/.cache/pypoetry/artifacts/
 COPY --from=cachebuilder --chown=mlebeast:mlebeast /home/mlebeast/staging/2/ /home/mlebeast/.cache/pypoetry/artifacts/
