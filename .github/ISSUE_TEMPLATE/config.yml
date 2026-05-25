@@ -1,0 +1,10 @@
+# Keep blank issues enabled — the dashboard's "Report a bug" button opens a
+# pre-filled (blank-template) issue via ?title=&body=, which needs this on.
+blank_issues_enabled: true
+contact_links:
+  - name: Questions & discussion
+    url: https://github.com/cgpadwick/mle-beast/discussions
+    about: Usage questions, ideas, and general discussion (not bug reports).
+  - name: Documentation
+    url: https://github.com/cgpadwick/mle-beast#readme
+    about: Setup, usage, and configuration docs.
