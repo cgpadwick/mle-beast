@@ -142,7 +142,6 @@ def register_routes(app: FastAPI) -> None:
         Deliberately NO secrets: only the provider *name* and model are
         reported, never API keys (which live in env, not settings anyway).
         """
-        import os
         import platform
 
         from mle_beast import __version__
@@ -151,10 +150,15 @@ def register_routes(app: FastAPI) -> None:
 
         s = get_settings()
         cuda = detect_cuda_version()
-        in_docker = (
-            Path("/.dockerenv").exists()
-            or bool(os.environ.get("MLE_BEAST_ML_FRAMEWORKS_CACHE"))
-        )
+        # Detect Docker from container signals only. (Don't key off
+        # MLE_BEAST_ML_FRAMEWORKS_CACHE — that's just a perf cache path a
+        # native user can set too, so it would mislabel native as docker.)
+        in_docker = Path("/.dockerenv").exists()
+        if not in_docker:
+            try:
+                in_docker = "docker" in Path("/proc/1/cgroup").read_text()
+            except OSError:
+                in_docker = False
         return {
             "version": __version__,
             "install": "docker" if in_docker else "native",

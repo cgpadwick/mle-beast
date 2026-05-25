@@ -80,17 +80,22 @@ function copyText(text) {
     return navigator.clipboard.writeText(text);
   }
   return new Promise((resolve, reject) => {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
     try {
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      ta.style.position = "fixed";
-      ta.style.opacity = "0";
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      document.body.removeChild(ta);
-      resolve();
-    } catch (e) { reject(e); }
+      // execCommand returns false (rather than throwing) when the copy
+      // is rejected — treat that as failure so callers don't show "Copied".
+      if (document.execCommand("copy")) resolve();
+      else reject(new Error("copy command rejected"));
+    } catch (e) {
+      reject(e);
+    } finally {
+      document.body.removeChild(ta);  // always clean up, even on failure
+    }
   });
 }
 
