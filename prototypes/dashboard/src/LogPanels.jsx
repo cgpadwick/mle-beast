@@ -274,11 +274,14 @@ function ConsolePanel({ runId, isRunning }) {
               next = next.slice(next.length - CONSOLE_MAX_CHARS);
               const nl = next.indexOf("\n");      // drop the partial leading line
               if (nl >= 0) next = next.slice(nl + 1);
-              setTruncated(true);
             }
             return next;
           });
           offsetRef.current = data.size;
+          // Truncation note is driven by the file size (monotonic), not a
+          // side effect inside the state updater. data.size is the full file
+          // length, so once it exceeds the cap we're definitely trimming.
+          setTruncated(data.size > CONSOLE_MAX_CHARS);
         } else if (typeof data.size === "number") {
           // Server may have truncated; sync offset just in case.
           if (data.size < offsetRef.current) {
