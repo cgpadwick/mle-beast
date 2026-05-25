@@ -273,9 +273,14 @@ class RunManager:
         row = self._db.get_run(run_id)
         return RunInfo.from_db_row(row) if row else None
 
-    def list_runs(self, status: Optional[str] = None) -> list[RunInfo]:
-        rows = self._db.list_runs(status=status)
+    def list_runs(
+        self, status: Optional[str] = None, limit: int = 50, offset: int = 0,
+    ) -> list[RunInfo]:
+        rows = self._db.list_runs(status=status, limit=limit, offset=offset)
         return [RunInfo.from_db_row(r) for r in rows]
+
+    def count_runs(self, status: Optional[str] = None) -> int:
+        return self._db.count_runs(status=status)
 
     def get_stages(self, run_id: str) -> list[StageInfo]:
         rows = self._db.get_stages(run_id)

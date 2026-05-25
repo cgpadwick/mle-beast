@@ -6,19 +6,36 @@ import { cardBase } from "../constants.js";
 import { Card, StatusPill, SectionHeader } from "../primitives.jsx";
 import { fmtDuration, fmtScore, fmtTokens } from "../format.js";
 
+const PAGE_SIZE = 50;
+
+const pageBtnStyle = (disabled) => ({
+  background: "transparent",
+  border: "1px solid var(--border)",
+  color: disabled ? "var(--text-faint)" : "var(--text-muted)",
+  fontSize: 11, fontWeight: 600,
+  padding: "6px 12px", borderRadius: 7,
+  cursor: disabled ? "default" : "pointer",
+  opacity: disabled ? 0.5 : 1,
+  fontFamily: "'JetBrains Mono',monospace",
+});
+
 function RunsListView({ onOpen, onNew, onHome }) {
   const [runs, setRuns] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);   // 0-based; page 0 holds the newest runs
   const [loading, setLoading] = useState(true);
   const [version, setVersion] = useState(null);
 
   const refresh = useCallback(() => {
     setLoading(true);
-    API.listRuns().then(setRuns).finally(() => setLoading(false));
-  }, []);
+    API.listRuns(PAGE_SIZE, page * PAGE_SIZE)
+      .then(d => { setRuns(d.runs || []); setTotal(d.total || 0); })
+      .finally(() => setLoading(false));
+  }, [page]);
 
   useEffect(() => {
     refresh();
-    const t = setInterval(refresh, 5000);  // gentle live-refresh of the list
+    const t = setInterval(refresh, 5000);  // gentle live-refresh of the current page
     return () => clearInterval(t);
   }, [refresh]);
 
@@ -27,7 +44,17 @@ function RunsListView({ onOpen, onNew, onHome }) {
     API.getVersion().then(d => setVersion(d?.version)).catch(() => {});
   }, []);
 
-  const liveCount = runs.filter(r => r.status === "running" || r.status === "pending").length;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  // Active runs are the newest, so they only ever appear on page 0.
+  const liveCount = page === 0
+    ? runs.filter(r => r.status === "running" || r.status === "pending").length
+    : 0;
+
+  const handleDelete = useCallback((run) => {
+    const label = (run.task || run.id.slice(0, 8)).slice(0, 60);
+    if (!confirm(`Delete this run?\n\n${label}\n\nThis removes its history and can't be undone.`)) return;
+    API.deleteRun(run.id).then(refresh).catch(() => {});
+  }, [refresh]);
 
   return (
     <div style={{ flex: 1, overflow: "auto" }}>
@@ -103,7 +130,7 @@ function RunsListView({ onOpen, onNew, onHome }) {
                   </>
                 )}
                 <span style={{ color: "var(--hero-text-faint)" }}>·</span>
-                <span>{loading ? "loading…" : `${runs.length} runs`}</span>
+                <span>{loading && !total ? "loading…" : `${total} runs`}</span>
                 {liveCount > 0 && (
                   <>
                     <span style={{ color: "var(--hero-text-faint)" }}>·</span>
@@ -133,7 +160,7 @@ function RunsListView({ onOpen, onNew, onHome }) {
         }}>+ New Run</button>
       </div>
 
-      {!loading && runs.length === 0 && (
+      {!loading && total === 0 && (
         <Card style={{ padding: 32, textAlign: "center" }}>
           <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>No runs yet.</div>
           <button onClick={onNew} style={{
@@ -166,9 +193,10 @@ function RunsListView({ onOpen, onNew, onHome }) {
               <div>
                 <SectionHeader label="Past" count={archived.length} />
                 <div style={{ ...cardBase, padding: 0, overflow: "hidden" }}>
+                  <RunTableHeader />
                   {archived.map((r, i) => (
                     <RunRowArchived
-                      key={r.id} run={r} onOpen={onOpen}
+                      key={r.id} run={r} onOpen={onOpen} onDelete={handleDelete}
                       isLast={i === archived.length - 1}
                     />
                   ))}
@@ -178,6 +206,34 @@ function RunsListView({ onOpen, onNew, onHome }) {
           </>
         );
       })()}
+
+      {/* Pagination — only when there's more than one page. Page 0 holds the
+          newest runs (incl. any active), so paging back browses history. */}
+      {total > PAGE_SIZE && (
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          marginTop: 16, fontFamily: "'JetBrains Mono',monospace",
+        }}>
+          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+            Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
+          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              style={pageBtnStyle(page === 0)}
+            >← Prev</button>
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+              Page {page + 1} / {pageCount}
+            </span>
+            <button
+              onClick={() => setPage(p => p + 1)}
+              disabled={page + 1 >= pageCount}
+              style={pageBtnStyle(page + 1 >= pageCount)}
+            >Next →</button>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );
@@ -235,7 +291,31 @@ function RunCardLive({ run, onOpen }) {
   );
 }
 
-function RunRowArchived({ run, onOpen, isLast }) {
+// Column header for the Past-runs table. Widths/gap/padding mirror
+// RunRowArchived exactly so the labels line up over their columns.
+function RunTableHeader() {
+  const base = {
+    fontSize: 9, fontWeight: 700, letterSpacing: "1px",
+    color: "var(--text-muted)", fontFamily: "'JetBrains Mono',monospace",
+    flexShrink: 0,
+  };
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 12,
+      padding: "7px 14px", borderBottom: "1px solid var(--border)",
+    }}>
+      <span style={{ ...base, width: 78 }}>STATUS</span>
+      <span style={{ ...base, width: 70 }}>ID</span>
+      <span style={{ ...base, flex: 1, minWidth: 0 }}>TASK</span>
+      <span style={{ ...base, width: 90, textAlign: "right" }}>PEAK</span>
+      <span style={{ ...base, width: 70, textAlign: "right" }}>MODE</span>
+      <span style={{ ...base, width: 70, textAlign: "right" }}>TIME</span>
+      <span style={{ width: 26, flexShrink: 0 }} />
+    </div>
+  );
+}
+
+function RunRowArchived({ run, onOpen, onDelete, isLast }) {
   // Compact single-line row for completed/failed/cancelled runs. Less
   // visual weight per row so a long history scans quickly.
   return (
@@ -248,7 +328,9 @@ function RunRowArchived({ run, onOpen, isLast }) {
     onMouseEnter={e => { e.currentTarget.style.background = "var(--surface-strong)"; }}
     onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
     >
-      <StatusPill status={run.status} />
+      <span style={{ width: 78, flexShrink: 0, display: "flex", alignItems: "center" }}>
+        <StatusPill status={run.status} />
+      </span>
       <span style={{
         fontSize: 11, color: "var(--text-subtle)",
         fontFamily: "'JetBrains Mono',monospace", flexShrink: 0, width: 70,
@@ -267,15 +349,39 @@ function RunRowArchived({ run, onOpen, isLast }) {
         {run.peak ? Number(run.peak.score).toFixed(4) : "—"}
       </span>
       <span style={{
-        fontSize: 10, color: "var(--text-faint)",
+        fontSize: 11, color: "var(--text-muted)",
         fontFamily: "'JetBrains Mono',monospace", flexShrink: 0, width: 70,
         textAlign: "right",
       }}>{run.mode}</span>
       <span style={{
-        fontSize: 10, color: "var(--text-faint)",
+        fontSize: 11, color: "var(--text-muted)",
         fontFamily: "'JetBrains Mono',monospace", flexShrink: 0, width: 70,
         textAlign: "right",
       }}>{fmtDuration(run.started_at, run.completed_at)}</span>
+      {/* Delete affordance. A <span role="button"> (not <button>) so it's
+          valid nested inside the row button; stopPropagation keeps the click
+          from opening the run. */}
+      <span
+        role="button"
+        tabIndex={0}
+        title="Delete this run"
+        onClick={(e) => { e.stopPropagation(); onDelete(run); }}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); e.preventDefault(); onDelete(run); } }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = "var(--status-fail-fg)"; e.currentTarget.style.background = "rgba(248,113,113,0.14)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; e.currentTarget.style.background = "transparent"; }}
+        style={{
+          flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+          width: 26, height: 26, borderRadius: 6, cursor: "pointer",
+          color: "var(--text-muted)", background: "transparent", transition: "all 0.12s",
+        }}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          <line x1="10" y1="11" x2="10" y2="17" />
+          <line x1="14" y1="11" x2="14" y2="17" />
+        </svg>
+      </span>
     </button>
   );
 }

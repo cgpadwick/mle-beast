@@ -1,7 +1,8 @@
 // API client for the FastAPI backend.
 
 const API = {
-  listRuns: () => fetch("/api/runs").then(r => r.json()),
+  listRuns: (limit = 50, offset = 0) =>
+    fetch(`/api/runs?limit=${limit}&offset=${offset}`).then(r => r.json()),
   getSummary: (id) => fetch(`/api/runs/${id}/summary`).then(r => r.json()),
   // Surfaces the server's `detail` message on a non-2xx (e.g. the 400 the
   // preflight returns for a missing workspace venv) so the New Run form
@@ -20,6 +21,7 @@ const API = {
     return data;
   },
   cancelRun: (id) => fetch(`/api/runs/${id}/cancel`, { method: "POST" }).then(r => r.json()),
+  deleteRun: (id) => fetch(`/api/admin/runs/${id}`, { method: "DELETE" }).then(r => r.json()),
   generateReport: (id) => fetch(`/api/runs/${id}/report`, { method: "POST" }).then(r => r.json()),
   detectLocalModel: () => fetch("/api/local-model-name").then(r => r.json()),
   getVersion: () => fetch("/api/version").then(r => r.json()),

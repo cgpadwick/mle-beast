@@ -170,9 +170,13 @@ def register_routes(app: FastAPI) -> None:
         }
 
     @app.get("/api/runs")
-    async def api_list_runs(status: Optional[str] = Query(None)):
+    async def api_list_runs(
+        status: Optional[str] = Query(None),
+        limit: int = Query(50, ge=1, le=200),
+        offset: int = Query(0, ge=0),
+    ):
         manager = get_run_manager()
-        runs = manager.list_runs(status=status)
+        runs = manager.list_runs(status=status, limit=limit, offset=offset)
         # Attach the peak score per run so the list view can show
         # at-a-glance "what did this achieve?" without a per-card fetch.
         # Cheap with the experiments table indexed on run_id.
@@ -181,7 +185,13 @@ def register_routes(app: FastAPI) -> None:
             d = RunResponse.from_info(r).model_dump()
             d["peak"] = manager.get_peak_score(r.id)
             results.append(d)
-        return results
+        # Paginated envelope: `total` lets the dashboard render page controls.
+        return {
+            "runs": results,
+            "total": manager.count_runs(status=status),
+            "limit": limit,
+            "offset": offset,
+        }
 
     @app.post("/api/runs")
     async def api_create_run(req: CreateRunRequest):
