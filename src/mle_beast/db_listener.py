@@ -11,6 +11,7 @@ the closure that does both jobs.
 
 from __future__ import annotations
 
+import json
 from typing import Callable
 
 from mle_beast.db import Database
@@ -61,10 +62,18 @@ def make_db_listener(run_id: str, db: Database) -> Callable[[PipelineEvent], Non
                 verdict_json=event.verdict,
             )
         elif isinstance(event, RetryOccurred):
+            # A retry means the critic rejected the stage's output and the
+            # actor is having another go — it is NOT a terminal failure (that
+            # path emits StageCompleted(outcome="fail") instead). Mark it
+            # "retrying" so the dashboard can distinguish it from a hard fail,
+            # and persist the critic's feedback into verdict_json so the
+            # reason travels with the stage rather than living only in a
+            # transient event.
             db.upsert_stage(
                 run_id, event.stage,
-                status="fail", attempt=event.attempt,
+                status="retrying", attempt=event.attempt,
                 max_attempts=event.max_attempts,
+                verdict_json=json.dumps({"feedback": event.feedback}),
             )
         elif isinstance(event, RunStateChanged) and event.new_state in (
             "completed", "failed", "cancelled",
@@ -80,7 +89,10 @@ def make_db_listener(run_id: str, db: Database) -> Callable[[PipelineEvent], Non
             # seen had the stage emitted its own completion event.
             outcome = "pass" if event.new_state == "completed" else "fail"
             for s in db.get_stages(run_id):
-                if s.get("status") == "active":
+                # Sweep both "active" and "retrying" — a run can terminate
+                # mid-retry, and a lingering "retrying" pill would misrepresent
+                # the finished run just like a lingering "active" one.
+                if s.get("status") in ("active", "retrying"):
                     db.upsert_stage(
                         run_id, s["stage_name"],
                         status=outcome,

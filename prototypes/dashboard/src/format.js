@@ -53,7 +53,7 @@ function eventToItem(ev) {
     case "tool_executed":
       item = { stage, type: "actor", msg: `${data.tool_name || "tool"}: ${(data.result_preview || "").slice(0, 100)}` }; break;
     case "retry_occurred":
-      item = { stage, type: "critic", msg: `Retry ${data.attempt}/${data.max_attempts}: ${(data.feedback || "").slice(0, 100)}`, verdict: false }; break;
+      item = { stage, type: "critic", msg: `Retry ${data.attempt}/${data.max_attempts}: ${(data.feedback || "").slice(0, 280)}`, verdict: false }; break;
     case "log_message":
       item = { stage, type: "system", msg: data.message || "" }; break;
     case "llm_call":

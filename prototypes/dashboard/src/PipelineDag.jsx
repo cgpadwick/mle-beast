@@ -39,7 +39,7 @@ function PipelineIndicator({ stageMap, activeStageKey, selectedStage, onSelectSt
     for (let i = STAGES_ORDER.length - 1; i >= 0; i--) {
       const k = STAGES_ORDER[i].key;
       const s = stageMap[k];
-      if (s?.status === "pass" || s?.status === "fail") {
+      if (s?.status === "pass" || s?.status === "fail" || s?.status === "retrying") {
         displayKey = k;
         displayState = s.status;
         break;
@@ -67,6 +67,8 @@ function PipelineIndicator({ stageMap, activeStageKey, selectedStage, onSelectSt
       boxShadow: "0 0 14px rgba(129,140,248,0.45)",
       animation: "pipeBreathe 2s ease-in-out infinite",
     };
+  } else if (displayState === "retrying") {
+    chipStyle = { background: "rgba(251,191,36,0.12)", border: "1.5px solid rgba(251,191,36,0.40)", color: "var(--status-warn-fg)" };
   } else if (isFail) {
     chipStyle = { background: "rgba(248,113,113,0.10)", border: "1.5px solid rgba(248,113,113,0.35)", color: "var(--status-fail-fg)" };
   } else if (displayState === "pass") {
@@ -430,6 +432,7 @@ function PipelineDagPanel({ stageMap, activeStageKey, selectedStage, onSelectSta
             const s = stageMap[key];
             const isActive = key === activeStageKey || s?.status === "active";
             const isPass = s?.status === "pass";
+            const isRetry = s?.status === "retrying";
             const isFail = s?.status === "fail" || s?.status === "error";
             const isSel = key === selectedStage;
             const isTerminal = key === "terminal";
@@ -450,6 +453,12 @@ function PipelineDagPanel({ stageMap, activeStageKey, selectedStage, onSelectSta
               // on light the bg is near-white → dark text reads. Using
               // var(--text) gives us both for free.
               textColor = "var(--text)";
+            } else if (isRetry) {
+              // Amber, not red — the critic rejected this attempt and the
+              // actor is retrying; it's in-flight, not a terminal failure.
+              fill = "rgba(251,191,36,0.12)";
+              stroke = "rgba(251,191,36,0.55)";
+              textColor = "var(--status-warn-fg)";
             } else if (isFail) {
               fill = "url(#nodeFail)";
               stroke = "rgba(248,113,113,0.55)";
