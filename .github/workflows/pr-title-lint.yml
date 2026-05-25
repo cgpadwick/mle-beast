@@ -1,0 +1,94 @@
+# Lint pull-request titles against Conventional Commits.
+#
+# Why this exists:
+#   Releases are automated by release-please (.github/workflows/release-please.yml),
+#   which only logs a change in the CHANGELOG + version bump when its commit
+#   subject follows Conventional Commits (feat: / fix: / perf: ...). We
+#   squash-merge, so the PR *title* becomes that commit subject on main. A
+#   non-conventional title (e.g. "Runs list: ...") therefore silently drops the
+#   change from the next release. This check fails the PR until the title is
+#   conventional, so nothing slips past release-please again.
+#
+# Accepted format:  <type>(optional-scope): <subject>
+#   e.g.  feat(dashboard): per-run delete + pagination
+#         fix: validator must check for pip
+#         perf: window the console on long runs
+#
+# Bump mapping (pre-1.0, see release-please-config.json):
+#   fix -> patch   feat -> minor   feat!/BREAKING CHANGE -> major
+#
+# Uses pull_request_target (not pull_request) so the token can post the help
+# comment on PRs from forks. This is safe here: the job validates PR metadata
+# only and never checks out or runs PR code.
+
+name: pr-title-lint
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+
+permissions:
+  pull-requests: write   # post/update/remove the help comment
+
+jobs:
+  lint-title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR title (Conventional Commits)
+        id: lint
+        uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Keep in sync with the types release-please understands.
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            docs
+            build
+            ci
+            chore
+            test
+            revert
+            style
+          requireScope: false
+
+      - name: Post help comment on failure
+        if: always() && steps.lint.outputs.error_message != null
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: pr-title-lint
+          message: |
+            ### ⚠️ PR title isn't a Conventional Commit
+
+            We squash-merge, so this PR's **title** becomes the commit on `main`,
+            and [release-please](https://github.com/googleapis/release-please)
+            only adds Conventional-Commit titles to the changelog + version bump.
+
+            Please rename this PR to `type(optional-scope): subject`, e.g.:
+            - `feat(dashboard): per-run delete + pagination`
+            - `fix: validator must check for pip`
+            - `perf: window the console on long runs`
+
+            Allowed types: `feat`, `fix`, `perf`, `refactor`, `docs`, `build`,
+            `ci`, `chore`, `test`, `revert`, `style`.
+
+            <details><summary>Validation error</summary>
+
+            ```
+            ${{ steps.lint.outputs.error_message }}
+            ```
+            </details>
+
+      - name: Remove help comment once the title is fixed
+        if: steps.lint.outputs.error_message == null
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: pr-title-lint
+          delete: true
