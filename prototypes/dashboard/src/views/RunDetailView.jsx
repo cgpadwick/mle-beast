@@ -20,6 +20,42 @@ import { StatsCards } from "./runDetail/StatsCards.jsx";
 import { FeedTabs } from "./runDetail/FeedTabs.jsx";
 import { StagePanel } from "./runDetail/StagePanel.jsx";
 
+// Banner shown when a run carries an error_message (failed runs, and the
+// rare cancelled-with-cause). Without this the error was captured in the
+// DB and returned by the API but never rendered — a failed run looked
+// like a status pill and nothing else. The message is often a multi-line
+// traceback, so render it in a scrollable monospace block. The heading
+// tracks the run's status so a cancelled-with-cause run doesn't claim it
+// "failed".
+function FailureBanner({ status, message }) {
+  if (!message) return null;
+  const heading = status === "cancelled" ? "Run cancelled" : "Run failed";
+  return (
+    <div style={{
+      margin: "12px 24px 0", padding: "12px 14px",
+      background: "rgba(248,113,113,0.08)",
+      border: "1px solid rgba(248,113,113,0.35)",
+      borderRadius: 8,
+    }}>
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8,
+        color: "var(--status-fail-fg)", fontWeight: 700, fontSize: 12,
+        marginBottom: 8,
+      }}>
+        <span aria-hidden style={{ fontSize: 13 }}>✗</span>
+        {heading}
+      </div>
+      <pre style={{
+        margin: 0, maxHeight: 220, overflow: "auto",
+        whiteSpace: "pre-wrap", wordBreak: "break-word",
+        fontSize: 11, lineHeight: 1.5,
+        fontFamily: "'JetBrains Mono',monospace",
+        color: "var(--text-muted)",
+      }}>{message}</pre>
+    </div>
+  );
+}
+
 function RunDetailView({ runId, onBack }) {
   const [summary, setSummary] = useState(null);
   const [stage, setStage] = useState("hillclimb");
@@ -132,6 +168,8 @@ function RunDetailView({ runId, onBack }) {
         onBack={onBack}
         onCancel={fetchSummary}
       />
+
+      <FailureBanner status={run.status} message={run.error_message} />
 
       <StatsCards
         run={run}

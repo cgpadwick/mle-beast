@@ -24,9 +24,30 @@ target_metric: { name: accuracy, target_value: 0.85 }
 
 Both modes share the same hill-climbing engine: propose → implement → test → train → evaluate, keep improvements via git, revert failures.
 
-## Quick start with Docker (recommended)
+## Quick start (one command)
 
-Zero Python install needed on your host. Three commands:
+```bash
+curl -fsSL https://raw.githubusercontent.com/cgpadwick/mle-beast/main/setup-mle-beast.sh | bash
+```
+
+Interactive wizard. Asks whether you want **Docker** (recommended for first-timers, zero Python install) or **Native** (pipx install + BYO env). For Docker it generates a tailored `docker-compose.yml` + `.env` based on your answers and starts the container; for Native it runs `pipx install mle-beast` and hands off to `mle-beast init`.
+
+Prefer to review before piping curl into bash? (Wise.)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/cgpadwick/mle-beast/main/setup-mle-beast.sh -o setup-mle-beast.sh
+less setup-mle-beast.sh    # read it
+bash setup-mle-beast.sh    # then run
+```
+
+Non-interactive (CI / automation):
+
+```bash
+bash setup-mle-beast.sh --docker --yes \
+    --openrouter-key="$OPENROUTER_API_KEY"
+```
+
+### Manual Docker quick start (if you'd rather skip the wizard)
 
 ```bash
 # 1. Grab the compose file + env template
