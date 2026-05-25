@@ -32,7 +32,8 @@ function RunsListView({ onOpen, onNew, onHome }) {
         position: "relative",
         height: 144,
         marginBottom: 16,
-        backgroundColor: "#000",
+        background: "var(--hero-bg)",
+        borderBottom: "1px solid var(--border)",
         overflow: "hidden",
       }}>
         <div style={{
@@ -74,26 +75,26 @@ function RunsListView({ onOpen, onNew, onHome }) {
                 fontSize: 30, fontWeight: 800,
                 letterSpacing: "-0.02em", lineHeight: 1.0,
                 marginBottom: 6,
-                background: "linear-gradient(135deg, #ffffff 0%, #c4b5fd 100%)",
+                background: "var(--hero-wordmark)",
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
                 backgroundClip: "text",
                 color: "transparent",
-                textShadow: "0 2px 10px rgba(0,0,0,0.5)",
+                textShadow: "var(--hero-text-shadow)",
               }}>mle-beast</h1>
               <div style={{
-                fontSize: 11, color: "rgba(255,255,255,0.75)",
+                fontSize: 11, color: "var(--hero-text)",
                 fontFamily: "'JetBrains Mono',monospace",
                 letterSpacing: "0.5px",
                 display: "flex", alignItems: "center", gap: 8, flexWrap: "nowrap",
-                textShadow: "0 1px 3px rgba(0,0,0,0.6)",
+                textShadow: "var(--hero-subtext-shadow)",
               }}>
                 <span>autonomous ML research agent</span>
-                <span style={{ color: "rgba(255,255,255,0.4)" }}>·</span>
+                <span style={{ color: "var(--hero-text-faint)" }}>·</span>
                 <span>{loading ? "loading…" : `${runs.length} runs`}</span>
                 {liveCount > 0 && (
                   <>
-                    <span style={{ color: "rgba(255,255,255,0.4)" }}>·</span>
+                    <span style={{ color: "var(--hero-text-faint)" }}>·</span>
                     <span style={{ color: "var(--accent-info)", fontWeight: 700 }}>
                       {liveCount} active
                     </span>

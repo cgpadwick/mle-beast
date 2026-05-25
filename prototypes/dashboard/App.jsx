@@ -48,7 +48,11 @@ export default function App() {
                 is over the regular page bg and we use theme-aware
                 styling. */}
         {(() => {
-        const onHero = view === "list";
+        // The list view's hero is dark only in dark mode now (it's a light
+        // tint in light mode), so only force the light-frosted-on-dark
+        // button style when the hero is actually dark. Otherwise the cluster
+        // follows the theme like every other view.
+        const onHero = view === "list" && theme === "dark";
         const btnBg = onHero
           ? "rgba(255,255,255,0.14)"
           : (theme === "dark" ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.06)");
@@ -157,6 +161,14 @@ export default function App() {
           --status-ok-fg: #4ade80;
           --status-fail-fg: #f87171;
           --status-warn-fg: #fbbf24;
+          /* Runs-list hero banner. Dark: the original black canvas the
+             gravitational-waves logo + white wordmark were designed for. */
+          --hero-bg: #000;
+          --hero-wordmark: linear-gradient(135deg, #ffffff 0%, #c4b5fd 100%);
+          --hero-text: rgba(255,255,255,0.75);
+          --hero-text-faint: rgba(255,255,255,0.4);
+          --hero-text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+          --hero-subtext-shadow: 0 1px 3px rgba(0,0,0,0.6);
         }
         .theme-light {
           --bg: #f5f7fb;
@@ -176,6 +188,15 @@ export default function App() {
           --status-ok-fg: #15803d;
           --status-fail-fg: #b91c1c;
           --status-warn-fg: #b45309;
+          /* Light: a soft indigo→violet tint instead of a black slab, with
+             the wordmark + tagline darkened to read on it. The logo photo
+             keeps its own dark tile (a small contained element). */
+          --hero-bg: linear-gradient(135deg, #eef2ff 0%, #faf5ff 100%);
+          --hero-wordmark: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+          --hero-text: rgba(15,23,42,0.65);
+          --hero-text-faint: rgba(15,23,42,0.4);
+          --hero-text-shadow: none;
+          --hero-subtext-shadow: none;
         }
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
