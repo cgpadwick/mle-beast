@@ -106,7 +106,10 @@ function LLMTracePanel({ events, runStart }) {
     .map(e => {
       let data = {};
       try { data = JSON.parse(e.data_json || "{}"); } catch {}
-      return { ...data, timestamp: e.timestamp };
+      // _eid: the event row's DB primary key — a guaranteed-unique, stable
+      // React key (timestamps can collide / round, which would corrupt the
+      // per-card expanded state).
+      return { ...data, timestamp: e.timestamp, _eid: e.id };
     })
     .reverse();
 
@@ -130,7 +133,7 @@ function LLMTracePanel({ events, runStart }) {
         // state. All collapsed by default — clicking is the only thing that
         // expands a card, so a new arrival never pops open under you.
         <LLMCallCard
-          key={c.timestamp}
+          key={c._eid ?? c.timestamp}
           call={c}
           runStart={runStart}
         />
