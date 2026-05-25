@@ -6,29 +6,34 @@
 # → dashboard at http://localhost:8000, no host-side install needed.
 #
 # Design notes:
-#  - Single-stage build. Multi-stage with a separate builder doesn't buy
-#    much here because the final image still needs Python, poetry, the
-#    ml-frameworks cache, and the wheel cache — those are the bulk.
-#  - Pre-clones ml-frameworks AND pre-primes the poetry cache so the
-#    first workspace setup is fast (cp instead of git clone; install
-#    resolves locally instead of pulling 5+ GB from PyPI).
-#  - Three env vars tell mle-beast's workspace setup to USE the
-#    pre-staged caches instead of going to the network:
+#  - Multi-stage. A `cachebuilder` stage runs the real `poetry install`
+#    once to populate poetry's artifact cache (~/.cache/pypoetry/artifacts),
+#    then the final stage COPYs that cache in — split across 16 layers so
+#    `docker pull` streams them in parallel instead of as one ~3.5 GB blob.
+#  - Pre-clones ml-frameworks AND ships poetry's primed artifact cache so
+#    the first workspace setup is fast and OFFLINE: WorkspaceCreator runs
+#    `poetry install`, which resolves from the workspace's poetry.lock and
+#    pulls every wheel from the bundled artifact cache (verified: full
+#    cu126 stack installs with ~1 MB of network, vs ~3.5 GB cold).
+#  - Two env vars wire the bundled caches in:
 #      MLE_BEAST_ML_FRAMEWORKS_CACHE — WorkspaceCreator reads this and
-#        cp -r's instead of git clone'ing.
-#      MLE_PYTORCH_STACK — cuda_detection.py's existing override hook;
-#        forces the cu126 stack to match the wheels we pre-downloaded.
-#      PIP_FIND_LINKS — points pip at /opt/wheels so the workspace's
-#        poetry install (which shells out to pip) finds wheels
-#        locally instead of going to PyPI.
-#  - The wheel cache is split across many small Docker layers (~16)
-#    so `docker pull` can stream them in parallel. The naive
-#    "single big poetry install" approach produced one ~7 GB layer
-#    that pulled as a single TCP stream and took ~30 min on a fast
-#    connection. Splitting into N layers reduces pull time roughly
-#    by N (modulo Docker's max-concurrent-downloads).
+#        cp -r's the repo instead of git clone'ing.
+#      MLE_PYTORCH_STACK — cuda_detection.py's override hook; pins the
+#        cu126 stack so it matches the artifact cache we primed (without
+#        it, select_pytorch_stack picks off the HOST driver's CUDA version
+#        — possibly 13.x — and misses our 12.6 wheels).
+#
+#  Why not PIP_FIND_LINKS + pip download (the previous approach)? Poetry
+#  does NOT honor PIP_FIND_LINKS — it uses its own resolver and artifact
+#  cache — so a flat pip-download wheel dir was bundled but never used,
+#  and every first run re-downloaded the whole stack. Priming poetry's
+#  own cache is what actually makes the runtime install offline.
 
-FROM nvidia/cuda:12.6.0-base-ubuntu22.04
+# ====================================================================
+# base — shared by the cache builder and the final image: system deps,
+# the non-root user, pipx + poetry, and the ml-frameworks clone.
+# ====================================================================
+FROM nvidia/cuda:12.6.0-base-ubuntu22.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
@@ -57,9 +62,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 #    avoids bind-mount permission surprises on Linux/WSL2).
 # --------------------------------------------------------------------
 RUN useradd -m -s /bin/bash -u 1000 mlebeast
-# Pre-create the wheel cache dir while still root (/opt is root-owned) and
-# hand it to mlebeast, so the non-root build steps below can populate it.
-RUN mkdir -p /opt/wheels && chown mlebeast:mlebeast /opt/wheels
 USER mlebeast
 WORKDIR /home/mlebeast
 ENV PATH=/home/mlebeast/.local/bin:/home/mlebeast/.venv/bin:$PATH
@@ -67,81 +69,77 @@ ENV PATH=/home/mlebeast/.local/bin:/home/mlebeast/.venv/bin:$PATH
 # --------------------------------------------------------------------
 # 3. pipx + poetry — installed at image build time so first workspace
 #    setup doesn't have to fetch them. Poetry config persists per-user.
-#    poetry-plugin-export is injected because Poetry 2.x dropped the
-#    built-in `poetry export` command (it lives in this plugin now) and
-#    step 5 below uses `poetry export` to generate the wheel-bucket
-#    requirements files.
 # --------------------------------------------------------------------
 RUN python3 -m pip install --user --no-cache-dir pipx \
     && python3 -m pipx ensurepath \
     && pipx install poetry \
-    && pipx inject poetry poetry-plugin-export \
     && poetry config virtualenvs.in-project true \
     && poetry config virtualenvs.create true
 
 # --------------------------------------------------------------------
 # 4. Pre-clone ml-frameworks. WorkspaceCreator detects this dir via the
-#    MLE_BEAST_ML_FRAMEWORKS_CACHE env var (see step 7) and `cp -r`'s
+#    MLE_BEAST_ML_FRAMEWORKS_CACHE env var (see final stage) and `cp -r`'s
 #    instead of git-cloning. Saves ~30s + network on every workspace.
 # --------------------------------------------------------------------
 RUN git clone --depth 1 --branch master \
         https://github.com/cgpadwick/ml-frameworks.git \
         /home/mlebeast/ml-frameworks-cache
 
-# --------------------------------------------------------------------
-# 5. Pre-download wheels for the cu126 stack into /opt/wheels, split
-#    across many small RUN layers. Each RUN = one Docker layer = one
-#    parallelizable stream during `docker pull`. The old approach (a
-#    single `poetry install` priming step) produced one ~7 GB layer
-#    that pulled as a single TCP stream — ~30 min to pull on a fast
-#    connection because Docker can't parallelize within one layer.
-#    Splitting into ~16 buckets lets Docker pull multiple shards
-#    concurrently (`max-concurrent-downloads`, default 3-5), cutting
-#    end-to-end pull time roughly to 1/N.
-#
-#    Pip writes wheels to /opt/wheels (a flat dir). At runtime the
-#    workspace's `poetry install` shells out to pip, which honors
-#    PIP_FIND_LINKS=/opt/wheels (set later in step 7) and skips
-#    network for any wheel already on disk.
-#
-#    `--no-deps` keeps each bucket installable independently — the
-#    poetry-exported requirements file lists every transitive
-#    dependency explicitly, so we don't need pip's resolver to add
-#    anything per-bucket. That also avoids per-bucket dependency
-#    resolution overlap.
-# --------------------------------------------------------------------
-RUN cd /home/mlebeast/ml-frameworks-cache/stacks/pytorch-cu126 \
-    && poetry export -f requirements.txt --output /tmp/all-reqs.txt --without-hashes \
-    && python3 -c "\
-raw = [l for l in open('/tmp/all-reqs.txt') if l.strip() and not l.startswith('#')]; \
-opts = [l for l in raw if l.lstrip().startswith('-')]; \
-pkgs = [l for l in raw if not l.lstrip().startswith('-')]; \
-[open(f'/tmp/reqs-{i:02d}.txt', 'w').writelines(opts + pkgs[i::16]) for i in range(16)]; \
-print(f'Split {len(pkgs)} packages into 16 buckets (+{len(opts)} index opt(s) per bucket)')" \
-    && mkdir -p /opt/wheels
+# ====================================================================
+# cachebuilder — prime poetry's artifact cache for the cu126 stack, then
+# reorganize it into 16 first-hex buckets so the final stage can COPY
+# each as its own (parallel-pullable) layer. This whole stage is
+# discarded; only the staged artifact buckets are copied forward.
+# ====================================================================
+FROM base AS cachebuilder
 
-# Each pip-download is its own Docker layer. 16 layers ≈ 16 shards
-# pullable in parallel. Round-robin partitioning (lines[i::16]) keeps
-# bucket sizes roughly balanced since the requirements list is
-# alphabetic + sorted-ish.
-RUN pip download -r /tmp/reqs-00.txt -d /opt/wheels --no-deps
-RUN pip download -r /tmp/reqs-01.txt -d /opt/wheels --no-deps
-RUN pip download -r /tmp/reqs-02.txt -d /opt/wheels --no-deps
-RUN pip download -r /tmp/reqs-03.txt -d /opt/wheels --no-deps
-RUN pip download -r /tmp/reqs-04.txt -d /opt/wheels --no-deps
-RUN pip download -r /tmp/reqs-05.txt -d /opt/wheels --no-deps
-RUN pip download -r /tmp/reqs-06.txt -d /opt/wheels --no-deps
-RUN pip download -r /tmp/reqs-07.txt -d /opt/wheels --no-deps
-RUN pip download -r /tmp/reqs-08.txt -d /opt/wheels --no-deps
-RUN pip download -r /tmp/reqs-09.txt -d /opt/wheels --no-deps
-RUN pip download -r /tmp/reqs-10.txt -d /opt/wheels --no-deps
-RUN pip download -r /tmp/reqs-11.txt -d /opt/wheels --no-deps
-RUN pip download -r /tmp/reqs-12.txt -d /opt/wheels --no-deps
-RUN pip download -r /tmp/reqs-13.txt -d /opt/wheels --no-deps
-RUN pip download -r /tmp/reqs-14.txt -d /opt/wheels --no-deps
-RUN pip download -r /tmp/reqs-15.txt -d /opt/wheels --no-deps
-# Throw away the requirements file scratch space; /opt/wheels persists.
-RUN rm -f /tmp/all-reqs.txt /tmp/reqs-*.txt
+# Run the same install the runtime workspace setup runs. This downloads
+# every wheel in the cu126 lock into ~/.cache/pypoetry/artifacts. The
+# throwaway .venv it also builds is irrelevant — we keep only the cache.
+RUN cd /home/mlebeast/ml-frameworks-cache/stacks/pytorch-cu126 \
+    && poetry install --no-root
+
+# Poetry lays artifacts out as artifacts/<2hex>/<2hex>/.../<hash>/pkg.whl.
+# Bucket the top-level 2-hex dirs by their first hex char into staging/0..f
+# (all 16 created up front so an empty bucket still COPYs cleanly). We
+# move rather than copy to keep the builder lean. Poetry's separate HTTP
+# cache (~/.cache/pypoetry/cache, a redundant ~3.5 GB copy of the same
+# downloads) is deliberately NOT staged — the artifact cache alone makes
+# the runtime install offline.
+# POSIX sh (dash) here — no bash substring syntax. `printf %.1s` gives the
+# first char of each 2-hex dir name to pick its bucket.
+RUN cd /home/mlebeast/.cache/pypoetry/artifacts \
+    && for h in 0 1 2 3 4 5 6 7 8 9 a b c d e f; do mkdir -p /home/mlebeast/staging/$h; done \
+    && for d in */; do d=${d%/}; first=$(printf '%.1s' "$d"); mv "$d" "/home/mlebeast/staging/$first/"; done
+
+# ====================================================================
+# final — the published image.
+# ====================================================================
+FROM base
+
+# --------------------------------------------------------------------
+# 5. Bring in the primed poetry artifact cache, one bucket per layer.
+#    16 COPY layers ≈ 16 shards pullable in parallel (bounded by
+#    Docker's max-concurrent-downloads), vs one ~3.5 GB single-stream
+#    layer. Each COPY pulls the CONTENTS of a staging bucket into the
+#    real artifacts dir, preserving poetry's hash-path layout.
+# --------------------------------------------------------------------
+COPY --from=cachebuilder --chown=mlebeast:mlebeast /home/mlebeast/staging/0/ /home/mlebeast/.cache/pypoetry/artifacts/
+COPY --from=cachebuilder --chown=mlebeast:mlebeast /home/mlebeast/staging/1/ /home/mlebeast/.cache/pypoetry/artifacts/
+COPY --from=cachebuilder --chown=mlebeast:mlebeast /home/mlebeast/staging/2/ /home/mlebeast/.cache/pypoetry/artifacts/
+COPY --from=cachebuilder --chown=mlebeast:mlebeast /home/mlebeast/staging/3/ /home/mlebeast/.cache/pypoetry/artifacts/
+COPY --from=cachebuilder --chown=mlebeast:mlebeast /home/mlebeast/staging/4/ /home/mlebeast/.cache/pypoetry/artifacts/
+COPY --from=cachebuilder --chown=mlebeast:mlebeast /home/mlebeast/staging/5/ /home/mlebeast/.cache/pypoetry/artifacts/
+COPY --from=cachebuilder --chown=mlebeast:mlebeast /home/mlebeast/staging/6/ /home/mlebeast/.cache/pypoetry/artifacts/
+COPY --from=cachebuilder --chown=mlebeast:mlebeast /home/mlebeast/staging/7/ /home/mlebeast/.cache/pypoetry/artifacts/
+COPY --from=cachebuilder --chown=mlebeast:mlebeast /home/mlebeast/staging/8/ /home/mlebeast/.cache/pypoetry/artifacts/
+COPY --from=cachebuilder --chown=mlebeast:mlebeast /home/mlebeast/staging/9/ /home/mlebeast/.cache/pypoetry/artifacts/
+COPY --from=cachebuilder --chown=mlebeast:mlebeast /home/mlebeast/staging/a/ /home/mlebeast/.cache/pypoetry/artifacts/
+COPY --from=cachebuilder --chown=mlebeast:mlebeast /home/mlebeast/staging/b/ /home/mlebeast/.cache/pypoetry/artifacts/
+COPY --from=cachebuilder --chown=mlebeast:mlebeast /home/mlebeast/staging/c/ /home/mlebeast/.cache/pypoetry/artifacts/
+COPY --from=cachebuilder --chown=mlebeast:mlebeast /home/mlebeast/staging/d/ /home/mlebeast/.cache/pypoetry/artifacts/
+COPY --from=cachebuilder --chown=mlebeast:mlebeast /home/mlebeast/staging/e/ /home/mlebeast/.cache/pypoetry/artifacts/
+COPY --from=cachebuilder --chown=mlebeast:mlebeast /home/mlebeast/staging/f/ /home/mlebeast/.cache/pypoetry/artifacts/
 
 # --------------------------------------------------------------------
 # 6. Copy the mle-beast source and install into a dedicated venv.
@@ -160,21 +158,13 @@ RUN python3 -m venv /home/mlebeast/.venv \
 # 7. Wire the bundled cache + stack override.
 #    - MLE_BEAST_ML_FRAMEWORKS_CACHE: WorkspaceCreator reads this and
 #      uses cp -r from this dir instead of cloning ml-frameworks again.
-#    - MLE_PYTORCH_STACK: forces the cu126 stack to match the wheels
-#      we pre-downloaded into /opt/wheels. Without it,
-#      select_pytorch_stack would pick based on the HOST driver's
-#      CUDA version (could be 13.x) and miss our pre-staged 12.6
-#      wheels. (This env var is the existing override hook in
-#      cuda_detection.py.)
-#    - PIP_FIND_LINKS: pip looks here BEFORE going to PyPI. When the
-#      workspace's poetry install shells out to pip, pip finds our
-#      pre-staged wheels in /opt/wheels and skips the download. This
-#      is what lets the multi-layer pull from step 5 actually pay
-#      off at workspace-setup time.
+#    - MLE_PYTORCH_STACK: pins the cu126 stack so it matches the primed
+#      poetry artifact cache. Without it, select_pytorch_stack picks off
+#      the HOST driver's CUDA version (could be 13.x) and would miss the
+#      cached 12.6 wheels, forcing a full re-download.
 # --------------------------------------------------------------------
 ENV MLE_BEAST_ML_FRAMEWORKS_CACHE=/home/mlebeast/ml-frameworks-cache \
-    MLE_PYTORCH_STACK=pytorch-cu126 \
-    PIP_FIND_LINKS=/opt/wheels
+    MLE_PYTORCH_STACK=pytorch-cu126
 
 # --------------------------------------------------------------------
 # 8. Persistence mount points. The compose file binds host paths here
