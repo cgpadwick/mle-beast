@@ -6,7 +6,7 @@
 //   FeedTabs     — left pane (Console / LLM / Activity / Research / Git)
 //   StagePanel   — right pane (training / hill-climb / generic)
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 import { API } from "../api.js";
 import { STAGES_ORDER } from "../constants.js";
@@ -98,10 +98,20 @@ function RunDetailView({ runId, onBack }) {
 
   useEffect(() => { fetchSummary(); }, [fetchSummary]);
 
-  // SSE: refetch the bundle on any event. Cheap on localhost and avoids
-  // merge-state bugs from incremental updates.
-  const handleSse = useCallback(() => fetchSummary(), [fetchSummary]);
+  // SSE: refetch the bundle on events, but COALESCE bursts. During an active
+  // run events fire many times per second; refetching + reparsing the
+  // (growing) summary on each one re-renders the whole view and freezes the
+  // tab. Debounce so a burst triggers at most one refetch per window.
+  const sseTimer = useRef(null);
+  const handleSse = useCallback(() => {
+    if (sseTimer.current) return;  // a refetch is already scheduled
+    sseTimer.current = setTimeout(() => {
+      sseTimer.current = null;
+      fetchSummary();
+    }, 800);
+  }, [fetchSummary]);
   useRunSSE(runId, handleSse);
+  useEffect(() => () => { if (sseTimer.current) clearTimeout(sseTimer.current); }, []);
 
   // SSE-fallback polling. The EventBus is process-local — runs launched
   // outside the web server's process (e.g. via pytest or a separate CLI)

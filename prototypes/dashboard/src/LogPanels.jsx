@@ -225,9 +225,17 @@ function GitLogPanel({ runId, isRunning }) {
 // Console panel — tails the per-run console.log file via offset polling
 // ---------------------------------------------------------------------
 
+// Cap the rendered console to its tail. A console.log can grow to many MB
+// on a long run; rendering all of it in one <pre> (pre-wrap + break-word)
+// forces a full layout reflow of the whole string on every 1.5s poll, which
+// freezes the tab. We still tail the whole file via offset polling — we just
+// keep the in-DOM text bounded to the most recent slice.
+const CONSOLE_MAX_CHARS = 256 * 1024;
+
 function ConsolePanel({ runId, isRunning }) {
   const [text, setText] = useState("");
   const [exists, setExists] = useState(true);
+  const [truncated, setTruncated] = useState(false);
   const offsetRef = useRef(0);
   const preRef = useRef(null);
   const stickyBottomRef = useRef(true);
@@ -236,6 +244,7 @@ function ConsolePanel({ runId, isRunning }) {
     // Reset state when switching runs.
     setText("");
     setExists(true);
+    setTruncated(false);
     offsetRef.current = 0;
   }, [runId]);
 
@@ -259,7 +268,16 @@ function ConsolePanel({ runId, isRunning }) {
             const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
             stickyBottomRef.current = dist < 40;
           }
-          setText(prev => prev + data.text);
+          setText(prev => {
+            let next = prev + data.text;
+            if (next.length > CONSOLE_MAX_CHARS) {
+              next = next.slice(next.length - CONSOLE_MAX_CHARS);
+              const nl = next.indexOf("\n");      // drop the partial leading line
+              if (nl >= 0) next = next.slice(nl + 1);
+              setTruncated(true);
+            }
+            return next;
+          });
           offsetRef.current = data.size;
         } else if (typeof data.size === "number") {
           // Server may have truncated; sync offset just in case.
@@ -312,15 +330,26 @@ function ConsolePanel({ runId, isRunning }) {
   }
 
   return (
-    <pre ref={preRef} style={{
-      flex: 1, overflow: "auto", margin: 0,
-      padding: "10px 14px",
-      fontSize: 10.5, lineHeight: 1.45,
-      fontFamily: "'JetBrains Mono',monospace",
-      color: "var(--text)",
-      background: "var(--code-bg)",
-      whiteSpace: "pre-wrap", wordBreak: "break-word",
-    }}>{text}</pre>
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+      {truncated && (
+        <div style={{
+          fontSize: 9, color: "var(--text-faint)",
+          padding: "4px 14px", borderBottom: "1px solid var(--border)",
+          fontFamily: "'JetBrains Mono',monospace", flexShrink: 0,
+        }}>
+          showing the most recent {Math.round(CONSOLE_MAX_CHARS / 1024)} KB — older lines trimmed for performance
+        </div>
+      )}
+      <pre ref={preRef} style={{
+        flex: 1, overflow: "auto", margin: 0,
+        padding: "10px 14px",
+        fontSize: 10.5, lineHeight: 1.45,
+        fontFamily: "'JetBrains Mono',monospace",
+        color: "var(--text)",
+        background: "var(--code-bg)",
+        whiteSpace: "pre-wrap", wordBreak: "break-word",
+      }}>{text}</pre>
+    </div>
   );
 }
 
