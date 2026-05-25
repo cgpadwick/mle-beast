@@ -96,6 +96,54 @@ def test_greenfield_does_not_require_evaluate_py(tmp_path):
 
 
 # ----------------------------------------------------------------
+# validate_workspace_path: fail-fast on un-creatable run workspaces
+# ----------------------------------------------------------------
+
+class TestValidateWorkspacePath:
+    def test_existing_writable_dir_ok(self, tmp_path):
+        from mle_beast.workspace import validate_workspace_path
+        assert validate_workspace_path(tmp_path) == tmp_path.resolve()
+
+    def test_creatable_under_writable_parent_ok(self, tmp_path):
+        """A not-yet-existing path under a writable dir validates (mkdir -p
+        would succeed) without actually being created."""
+        from mle_beast.workspace import validate_workspace_path
+        target = tmp_path / "deep" / "nested" / "run"
+        assert validate_workspace_path(target) == target.resolve()
+        assert not target.exists()  # validation must not create it
+
+    def test_empty_path_raises(self):
+        from mle_beast.workspace import validate_workspace_path
+        with pytest.raises(RuntimeError, match=r"no workspace path"):
+            validate_workspace_path("   ")
+
+    def test_path_is_a_file_raises(self, tmp_path):
+        from mle_beast.workspace import validate_workspace_path
+        f = tmp_path / "afile"
+        f.write_text("x")
+        with pytest.raises(RuntimeError, match=r"not a directory"):
+            validate_workspace_path(f)
+
+    @pytest.mark.skipif(
+        hasattr(__import__("os"), "geteuid") and __import__("os").geteuid() == 0,
+        reason="root bypasses directory write permissions",
+    )
+    def test_unwritable_parent_raises(self, tmp_path):
+        """Nearest existing ancestor unwritable → can't mkdir → clear error."""
+        import os
+
+        from mle_beast.workspace import validate_workspace_path
+        locked = tmp_path / "locked"
+        locked.mkdir()
+        os.chmod(locked, 0o500)  # r-x: can't create children
+        try:
+            with pytest.raises(RuntimeError, match=r"not writable"):
+                validate_workspace_path(locked / "run")
+        finally:
+            os.chmod(locked, 0o700)  # restore so tmp_path cleanup works
+
+
+# ----------------------------------------------------------------
 # _clone_ml_frameworks: bundled-cache fast path
 # ----------------------------------------------------------------
 

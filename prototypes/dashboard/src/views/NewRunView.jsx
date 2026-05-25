@@ -31,6 +31,26 @@ function NewRunView({ onCreated, onCancel }) {
   //   {ok:true} → resolved
   //   {ok:false, error} → checked + failed (show inline)
   const [envProbe, setEnvProbe] = useState(null);
+  // Same tri-state probe for the workspace path.
+  const [wsProbe, setWsProbe] = useState(null);
+  // The mounted writable root (/workspaces in Docker), or null on native.
+  // Drives the prefill + the "mounted to your host" hint so a containerized
+  // user isn't guessing which paths are writable.
+  const [wsRoot, setWsRoot] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/workspace-root")
+      .then(r => r.json())
+      .then(({ root }) => {
+        if (cancelled || !root) return;
+        setWsRoot(root);
+        // Prefill only if the user hasn't already typed a path.
+        setForm(f => f.workspace ? f : { ...f, workspace: root + "/" });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const update = (key) => (e) => setForm({ ...form, [key]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
 
@@ -87,10 +107,50 @@ function NewRunView({ onCreated, onCancel }) {
       <form onSubmit={submit}>
         <Card style={{ padding: 18, marginBottom: 12 }}>
           <label style={labelStyle}>WORKSPACE PATH</label>
-          <input style={inputStyle} value={form.workspace} onChange={update("workspace")} placeholder="/tmp/my-workspace" required />
+          <input
+            style={{
+              ...inputStyle,
+              borderColor: wsProbe?.ok === false ? "rgba(248,113,113,0.55)" : "var(--border)",
+            }}
+            value={form.workspace}
+            onChange={(e) => { setWsProbe(null); setForm({ ...form, workspace: e.target.value }); }}
+            onBlur={async () => {
+              const path = form.workspace.trim();
+              if (!path) { setWsProbe(null); return; }
+              try {
+                const res = await fetch("/api/validate-workspace", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ path }),
+                });
+                setWsProbe(await res.json());
+              } catch (err) {
+                setWsProbe({ ok: false, error: String(err) });
+              }
+            }}
+            placeholder={wsRoot ? `${wsRoot}/my-run` : "/path/to/my-workspace"}
+            required
+          />
           <div style={{ fontSize: 9, color: "var(--text-faint)", marginTop: 4 }}>
             Where the pipeline writes code, models, and the experiment branch.
+            {wsRoot && (
+              <> Inside the container, <code style={{ fontFamily: "'JetBrains Mono',monospace" }}>{wsRoot}</code> is
+              mounted to your host — keep runs under it so results persist.</>
+            )}
           </div>
+          {wsProbe?.ok === true && (
+            <div style={{ fontSize: 10, color: "var(--status-ok-fg)", marginTop: 6, fontFamily: "'JetBrains Mono',monospace" }}>
+              ✓ {wsProbe.resolved}
+            </div>
+          )}
+          {wsProbe?.ok === false && (
+            <div style={{
+              fontSize: 10, color: "#fca5a5", marginTop: 6,
+              fontFamily: "'JetBrains Mono',monospace", whiteSpace: "pre-wrap",
+            }}>
+              ✗ {wsProbe.error}
+            </div>
+          )}
         </Card>
 
         <Card style={{ padding: 18, marginBottom: 12 }}>

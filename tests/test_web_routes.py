@@ -463,6 +463,69 @@ class TestRunsRoutes:
         assert r.status_code == 400
         assert "no path provided" in r.json()["error"]
 
+    # ---- workspace path validation ----
+
+    def test_create_run_preflights_workspace_path(
+        self, client, fake_manager, monkeypatch,
+    ):
+        """An un-creatable workspace path returns 400 at submit and never
+        starts a run (instead of a mid-pipeline PermissionError)."""
+        from mle_beast import workspace as workspace_mod
+
+        def boom(_p):
+            raise RuntimeError("cannot create workspace /adffafdka/t4st")
+
+        monkeypatch.setattr(workspace_mod, "validate_workspace_path", boom)
+
+        r = client.post("/api/runs", json={"workspace": "/adffafdka/t4st", "task": "x"})
+        assert r.status_code == 400
+        assert "cannot create workspace" in r.json()["detail"]
+        assert fake_manager.created == []
+
+    def test_workspace_root_endpoint(self, client, monkeypatch):
+        from mle_beast import workspace as workspace_mod
+        monkeypatch.setattr(
+            workspace_mod, "suggested_workspace_root", lambda: "/workspaces",
+        )
+        r = client.get("/api/workspace-root")
+        assert r.status_code == 200
+        assert r.json() == {"root": "/workspaces"}
+
+    def test_workspace_root_endpoint_native_null(self, client, monkeypatch):
+        from mle_beast import workspace as workspace_mod
+        monkeypatch.setattr(
+            workspace_mod, "suggested_workspace_root", lambda: None,
+        )
+        r = client.get("/api/workspace-root")
+        assert r.status_code == 200
+        assert r.json() == {"root": None}
+
+    def test_validate_workspace_endpoint_ok(self, client, monkeypatch, tmp_path):
+        from mle_beast import workspace as workspace_mod
+        monkeypatch.setattr(
+            workspace_mod, "validate_workspace_path", lambda p: tmp_path / "ws",
+        )
+        r = client.post("/api/validate-workspace", json={"path": "/workspaces/run"})
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+
+    def test_validate_workspace_endpoint_bad(self, client, monkeypatch):
+        from mle_beast import workspace as workspace_mod
+
+        def boom(_p):
+            raise RuntimeError("the nearest existing parent (/) is not writable")
+
+        monkeypatch.setattr(workspace_mod, "validate_workspace_path", boom)
+        r = client.post("/api/validate-workspace", json={"path": "/adffafdka"})
+        assert r.status_code == 400
+        assert r.json()["ok"] is False
+        assert "not writable" in r.json()["error"]
+
+    def test_validate_workspace_endpoint_empty_path(self, client):
+        r = client.post("/api/validate-workspace", json={"path": ""})
+        assert r.status_code == 400
+        assert "no path provided" in r.json()["error"]
+
     def test_get_run_returns_run_and_stages(self, client, fake_manager):
         fake_manager.runs["r-1"] = _make_run_info(id="r-1")
         fake_manager.stages["r-1"] = [

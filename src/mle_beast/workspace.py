@@ -168,6 +168,86 @@ def validate_environment_path(env_path: _PathLike) -> Path:
     return p
 
 
+def suggested_workspace_root() -> Optional[str]:
+    """The mounted, writable directory runs should live under, or None.
+
+    In the Docker image the compose file bind-mounts the host's workspaces
+    dir to ``/workspaces`` (see docker-compose.yml). That's the only path
+    a containerized user can write to that also persists on the host — but
+    they have no way to know that from the dashboard. The web layer surfaces
+    this so the New Run form can prefill it and explain the mount. Returns
+    None on native installs (no ``/workspaces``), where the user picks an
+    arbitrary host path.
+    """
+    p = Path("/workspaces")
+    if p.is_dir() and os.access(str(p), os.W_OK):
+        return "/workspaces"
+    return None
+
+
+def validate_workspace_path(workspace: _PathLike) -> Path:
+    """Validate that a run's workspace path can actually be created/written.
+
+    The pipeline runner does ``Path(workspace).mkdir(parents=True,
+    exist_ok=True)`` at the very start of a run. When the user types a path
+    rooted somewhere unwritable (e.g. ``/adffafdka`` — the container user
+    can't create dirs under ``/``), that mkdir raises PermissionError mid-run
+    and the run flips to failed. Validate up front so the New Run form gets
+    an immediate, actionable 400 instead.
+
+    Checks:
+      1. Non-empty.
+      2. If it exists: it's a directory and is writable.
+      3. If it doesn't exist: the nearest existing ancestor is a writable
+         directory, so ``mkdir -p`` would succeed.
+
+    Returns the resolved Path on success. Raises RuntimeError with an
+    actionable message (steering toward the mounted root when there is one)
+    on any failure.
+    """
+    raw = str(workspace).strip()
+    if not raw:
+        raise RuntimeError("no workspace path provided")
+
+    p = Path(raw).expanduser()
+    try:
+        p = p.resolve()
+    except OSError:
+        # resolve() can raise on pathological inputs; fall back to absolute.
+        p = Path(os.path.abspath(str(p)))
+
+    # Steer the user toward the mounted root when we're in a container.
+    root = suggested_workspace_root()
+    tip = (
+        f"\nTip: use a path under {root} — it's mounted to your host so "
+        f"results persist (e.g. {root}/my-run)."
+        if root else ""
+    )
+
+    if p.exists():
+        if not p.is_dir():
+            raise RuntimeError(
+                f"workspace path exists but is not a directory: {p}"
+            )
+        if not os.access(str(p), os.W_OK):
+            raise RuntimeError(f"workspace directory is not writable: {p}{tip}")
+        return p
+
+    # Doesn't exist yet — walk up to the nearest existing ancestor and make
+    # sure mkdir -p could create the path under it.
+    ancestor = p.parent
+    while not ancestor.exists() and ancestor != ancestor.parent:
+        ancestor = ancestor.parent
+    if not ancestor.exists() or not ancestor.is_dir():
+        raise RuntimeError(f"cannot create workspace {p}: no usable parent directory.{tip}")
+    if not os.access(str(ancestor), os.W_OK):
+        raise RuntimeError(
+            f"cannot create workspace {p}: the nearest existing parent "
+            f"({ancestor}) is not writable.{tip}"
+        )
+    return p
+
+
 class WorkspaceRegistry:
     """In-process registry for the current workspace path."""
 

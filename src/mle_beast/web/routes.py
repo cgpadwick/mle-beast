@@ -143,6 +143,16 @@ def register_routes(app: FastAPI) -> None:
 
     @app.post("/api/runs")
     async def api_create_run(req: CreateRunRequest):
+        # Preflight the workspace path itself. The runner mkdir's it at run
+        # start, so an uncreatable path (e.g. under an unwritable root) would
+        # otherwise crash the run with a mid-pipeline PermissionError. Fail
+        # fast with a clear 400 instead.
+        from mle_beast.workspace import validate_workspace_path
+        try:
+            validate_workspace_path(req.workspace)
+        except RuntimeError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
         # Normalize the BYO env path once: a whitespace-only value (e.g.
         # "   ") is treated as "not provided" so it can't slip past
         # validation and then get stored as a bogus env path. The same
@@ -227,6 +237,54 @@ def register_routes(app: FastAPI) -> None:
             )
         try:
             resolved = validate_environment_path(path)
+        except RuntimeError as e:
+            return JSONResponse(
+                {"ok": False, "error": str(e)}, status_code=400,
+            )
+        return {"ok": True, "resolved": str(resolved)}
+
+    @app.get("/api/workspace-root")
+    async def api_workspace_root():
+        """The mounted, writable dir runs should live under (or null).
+
+        In Docker this is /workspaces (the compose bind mount). The New Run
+        form uses it to prefill the workspace field and explain the mount, so
+        a containerized user isn't left guessing which paths are writable.
+        Null on native installs, where any host path goes.
+        """
+        from mle_beast.workspace import suggested_workspace_root
+        return {"root": suggested_workspace_root()}
+
+    @app.post("/api/validate-workspace")
+    async def api_validate_workspace(request: Request):
+        """Probe a workspace path. Returns 200 {ok:true} or 400
+        {ok:false, error:"..."}. Lets the New Run form flag an uncreatable
+        path on blur, before the user clicks Start. Mirrors
+        /api/validate-environment.
+        """
+        import json as _json
+
+        from mle_beast.workspace import validate_workspace_path
+
+        try:
+            body = await request.json()
+        except (ValueError, _json.JSONDecodeError):
+            return JSONResponse(
+                {"ok": False, "error": "request body must be JSON"},
+                status_code=400,
+            )
+        if not isinstance(body, dict):
+            return JSONResponse(
+                {"ok": False, "error": "request body must be a JSON object"},
+                status_code=400,
+            )
+        path = (body.get("path") or "").strip()
+        if not path:
+            return JSONResponse(
+                {"ok": False, "error": "no path provided"}, status_code=400,
+            )
+        try:
+            resolved = validate_workspace_path(path)
         except RuntimeError as e:
             return JSONResponse(
                 {"ok": False, "error": str(e)}, status_code=400,
