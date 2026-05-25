@@ -571,11 +571,26 @@ write_env_file() {
     printf '# Used by docker-compose.yml — Compose substitutes ${VAR} from this file.\n'
     printf '\n'
     printf 'MLE_BEAST_PROVIDER=%s\n' "$provider"
-    case "$provider" in
-      openrouter)  printf 'OPENROUTER_API_KEY=%s\n' "$or_key" ;;
-      openai)      printf 'OPENAI_API_KEY=%s\n' "$oa_key" ;;
-      local)       printf 'LOCAL_LLM_BASE_URL=%s\n' "$local_url" ;;
-    esac
+    printf '\n'
+    # All three provider creds appear so switching later is just an edit
+    # here: uncomment one and change MLE_BEAST_PROVIDER above. The active
+    # provider's value is filled in; the others are commented stubs.
+    if [ "$provider" = "openrouter" ]; then
+      printf 'OPENROUTER_API_KEY=%s\n' "$or_key"
+    else
+      printf '# OPENROUTER_API_KEY=\n'
+    fi
+    if [ "$provider" = "openai" ]; then
+      printf 'OPENAI_API_KEY=%s\n' "$oa_key"
+    else
+      printf '# OPENAI_API_KEY=\n'
+    fi
+    if [ "$provider" = "local" ]; then
+      printf 'LOCAL_LLM_BASE_URL=%s\n' "$local_url"
+    else
+      printf '# LOCAL_LLM_BASE_URL=http://host.docker.internal:8001/v1\n'
+    fi
+    printf '\n'
     # Pin the model the user picked in the wizard. The compose file
     # falls back to the same default if this line is removed, so the
     # user can also blank it later without breaking anything.
@@ -598,23 +613,22 @@ write_compose_file() {
     printf '    container_name: mle-beast\n'
     printf '    ports:\n'
     printf '      - "%s:8000"\n' "$port"
+    # Read every provider var from .env (each with a :- default) so the
+    # user can switch provider / keys / model later by editing .env alone —
+    # Compose substitutes ${VAR}, and mle-beast ignores empty keys. Mirrors
+    # the repo's canonical docker-compose.yml. MLE_BEAST_PROVIDER falls back
+    # to the wizard's pick if the user deletes the line from .env.
     printf '    environment:\n'
-    case "$provider" in
-      openrouter)
-        printf '      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}\n'
-        printf '      MLE_BEAST_PROVIDER: openrouter\n' ;;
-      openai)
-        printf '      OPENAI_API_KEY: ${OPENAI_API_KEY:-}\n'
-        printf '      MLE_BEAST_PROVIDER: openai\n' ;;
-      local)
-        printf '      LOCAL_LLM_BASE_URL: ${LOCAL_LLM_BASE_URL:-}\n'
-        printf '      MLE_BEAST_PROVIDER: local\n' ;;
-    esac
+    printf '      MLE_BEAST_PROVIDER: ${MLE_BEAST_PROVIDER:-%s}\n' "$provider"
+    printf '      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}\n'
+    printf '      OPENAI_API_KEY: ${OPENAI_API_KEY:-}\n'
+    printf '      LOCAL_LLM_BASE_URL: ${LOCAL_LLM_BASE_URL:-}\n'
     printf '      MLE_BEAST_MODEL: ${MLE_BEAST_MODEL:-deepseek/deepseek-v4-flash}\n'
-    if [ "$provider" = "local" ]; then
-      printf '    extra_hosts:\n'
-      printf '      - "host.docker.internal:host-gateway"\n'
-    fi
+    # Always emit the host.docker.internal shim (a no-op unless the user
+    # points LOCAL_LLM_BASE_URL at it) so switching to a local LLM via .env
+    # later just works on Linux without editing this file.
+    printf '    extra_hosts:\n'
+    printf '      - "host.docker.internal:host-gateway"\n'
     # Use absolute paths so the bind mounts work regardless of where
     # `docker compose up/down` is invoked from. (Compose's relative
     # paths resolve against the compose file's dir, which is fine —
