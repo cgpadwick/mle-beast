@@ -1,6 +1,6 @@
 [project]
 name = "mle-beast"
-version = "0.1.0"
+version = "1.0.0"
 description = "LLM-driven ML engineering agent — automatically generate, test, train, and improve ML models via actor/critic hill-climbing"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Chris Padwick", email = "cgpadwick@gmail.com" }]
