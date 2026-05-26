@@ -15,6 +15,10 @@ target_metric: { name: accuracy, target_value: 0.85 }
 
 …and it'll explore architectures (CNN → ViT → classical CV + sklearn), augmentations, and hyperparameters until it clears your bar.
 
+<p align="center">
+  <img src="mle-beast.png" alt="The mle-beast dashboard mid-run — pipeline DAG with hill-climb iteration, live metric, elapsed time, and cost" width="860">
+</p>
+
 ## See it in action
 
 <table>
