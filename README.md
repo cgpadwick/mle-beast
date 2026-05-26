@@ -15,6 +15,39 @@ target_metric: { name: accuracy, target_value: 0.85 }
 
 …and it'll explore architectures (CNN → ViT → classical CV + sklearn), augmentations, and hyperparameters until it clears your bar.
 
+## See it in action
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <a href="https://youtu.be/GppMX50_8YE">
+        <img src="https://img.youtube.com/vi/GppMX50_8YE/hqdefault.jpg" width="100%" alt="Intro & slide deck">
+      </a>
+      <br><b>Intro & slide deck</b>
+    </td>
+    <td align="center" width="50%">
+      <a href="https://youtu.be/GMl57Y_EJAc">
+        <img src="https://img.youtube.com/vi/GMl57Y_EJAc/hqdefault.jpg" width="100%" alt="Easy install">
+      </a>
+      <br><b>Easy install</b>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <a href="https://youtu.be/9y8227OPeNg">
+        <img src="https://img.youtube.com/vi/9y8227OPeNg/hqdefault.jpg" width="100%" alt="Greenfield AutoML run">
+      </a>
+      <br><b>Greenfield AutoML run</b>
+    </td>
+    <td align="center" width="50%">
+      <a href="https://youtu.be/jMipYNgjU1w">
+        <img src="https://img.youtube.com/vi/jMipYNgjU1w/hqdefault.jpg" width="100%" alt="Walkthrough">
+      </a>
+      <br><b>Walkthrough</b>
+    </td>
+  </tr>
+</table>
+
 ## Two modes
 
 | Mode | Use when |
