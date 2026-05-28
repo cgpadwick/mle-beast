@@ -310,6 +310,40 @@ run_native() {
 # Docker path
 # --------------------------------------------------------------------
 
+# --------------------------------------------------------------------
+# Port helpers
+# --------------------------------------------------------------------
+
+# Return 0 (true) if the given TCP port is free on the host.
+# Tries ss (Linux), then lsof (macOS), then netstat as a last resort.
+# Note: on WSL2 with mirrored networking, ports held by Windows
+# processes won't appear here — the check will report them as free
+# even though Docker can't bind them.
+port_is_free() {
+  local port="$1"
+  if command -v ss >/dev/null 2>&1; then
+    ! ss -tln 2>/dev/null | grep -qE ":${port}([[:space:]]|$)"
+  elif command -v lsof >/dev/null 2>&1; then
+    ! lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+  elif command -v netstat >/dev/null 2>&1; then
+    # BSD-flavored netstat output: "*.8000  ... LISTEN"
+    ! netstat -an 2>/dev/null | grep -qE "\.${port}[[:space:]]+.*LISTEN"
+  else
+    return 0  # can't check — assume free
+  fi
+}
+
+# Find the lowest free port >= the given starting port. Returns 1 (and
+# emits nothing on stdout) if every port up to 65535 is in use.
+find_free_port() {
+  local port="$1"
+  while [ "$port" -le 65535 ] && ! port_is_free "$port"; do
+    port=$((port + 1))
+  done
+  [ "$port" -gt 65535 ] && return 1
+  printf '%s' "$port"
+}
+
 # Compose v2 vs v1 detection — they're different binaries.
 # v2 = `docker compose` subcommand of the docker CLI (current).
 # v1 = `docker-compose` standalone (deprecated, was never going to
@@ -489,6 +523,25 @@ run_docker() {
   # ---- Port / tag ----
   header "Dashboard host port"
   PORT=$(ask "Port" "$PORT")
+  if ! port_is_free "$PORT"; then
+    local suggested
+    suggested=$(find_free_port "$((PORT + 1))")
+    if [ "$YES" = "true" ]; then
+      warn "Port ${PORT} is already in use. Auto-selecting ${suggested}."
+      PORT="$suggested"
+    else
+      warn "Port ${PORT} is already in use."
+      info "Tip: on WSL2 with mirrored networking a Windows process can hold"
+      info "a port that's invisible to ss/lsof inside Linux."
+      PORT=$(ask "Choose a different port" "$suggested")
+      while ! port_is_free "$PORT"; do
+        warn "Still in use."
+        suggested=$(find_free_port "$((PORT + 1))")
+        PORT=$(ask "Choose a different port" "$suggested")
+      done
+    fi
+    ok "Dashboard will be served on port ${PORT}"
+  fi
   header "Image tag"
   dim "  :edge tracks every main merge. :latest tracks tagged releases."
   TAG=$(ask "Tag" "$TAG")
