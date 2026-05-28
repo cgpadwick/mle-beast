@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0](https://github.com/cgpadwick/mle-beast/compare/v1.0.0...v1.1.0) (2026-05-28)
+
+
+### Features
+
+* **setup:** detect and resolve dashboard port conflicts ([#38](https://github.com/cgpadwick/mle-beast/issues/38)) ([97c319a](https://github.com/cgpadwick/mle-beast/commit/97c319a1f19d22da3839307fee2564c63ac92046))
+
+
+### Documentation
+
+* add MNIST first-run walkthrough to the README ([#40](https://github.com/cgpadwick/mle-beast/issues/40)) ([431eb70](https://github.com/cgpadwick/mle-beast/commit/431eb7067e7c301f57b1ccc9360358bf69c3c0be))
+
 ## [1.0.0](https://github.com/cgpadwick/mle-beast/compare/v0.1.0...v1.0.0) (2026-05-26)
 
 🎉 **First stable release.** Everything merged after the 0.1.0 initial public release, hand-curated into the buckets below.
